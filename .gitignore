@@ -10,6 +10,7 @@ local-data/
 
 # Credenciales de service account (solo para migración puntual, nunca a git)
 serviceAccountKey.json
+serviceaccount-dev.json
 *firebase-adminsdk*.json
 financial-dashboard-algam-firebase-adminsdk-fbsvc-997e9434d5.json
 financial-dashboard-algam-firebase-adminsdk-fbsvc-*.json
