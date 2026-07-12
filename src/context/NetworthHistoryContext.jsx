@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { collection, doc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuthContext } from './AuthContext';
 
@@ -47,6 +47,20 @@ export function NetworthHistoryProvider({ children }) {
     [rawRows]
   );
 
+  // Crea/actualiza el registro de hoy con los totales por categoría del
+  // formulario de Patrimonio Neto. merge:true conserva cualquier otro campo
+  // del doc (p.ej. si ya existía); hidden:false lo des-oculta si el usuario
+  // lo había borrado antes y hoy vuelve a guardar un valor para esa fecha.
+  const saveToday = async ({ ahorro, inversion, jubilacion, deuda, prestamo }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    await setDoc(
+      doc(db, 'networthHistory', today),
+      { ahorro, inversion, jubilacion, deuda, prestamo, hidden: false },
+      { merge: true }
+    );
+    return today;
+  };
+
   const deleteEntry = async (date) => {
     await updateDoc(doc(db, 'networthHistory', date), { hidden: true });
   };
@@ -60,7 +74,7 @@ export function NetworthHistoryProvider({ children }) {
 
   return (
     <NetworthHistoryContext.Provider
-      value={{ history, deleteEntry, restoreAll, deletedCount: hiddenRows.length }}
+      value={{ history, saveToday, deleteEntry, restoreAll, deletedCount: hiddenRows.length }}
     >
       {children}
     </NetworthHistoryContext.Provider>

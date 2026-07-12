@@ -3,6 +3,7 @@ import AppLayout from '../components/layout/AppLayout';
 import { useAccounts } from '../context/AccountsContext';
 import { useProperties } from '../context/PropertiesContext';
 import { useVehicles, estimateCurrentValue, estimateMonthlyDepreciation } from '../context/VehiclesContext';
+import { useNetworthHistory } from '../context/NetworthHistoryContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -35,6 +36,7 @@ export default function PatrimonioNeto() {
   const { accounts: allAccounts, updateAccount } = useAccounts();
   const { properties } = useProperties();
   const { vehicles } = useVehicles();
+  const { saveToday } = useNetworthHistory();
 
   // Accounts turned off ("Incluir" = False in Configuración → Cuentas) are excluded here.
   const accounts = useMemo(() => allAccounts.filter((acc) => acc.active !== false), [allAccounts]);
@@ -119,7 +121,7 @@ export default function PatrimonioNeto() {
     setCheckedFields((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
 
     const changes = [];
@@ -152,6 +154,21 @@ export default function PatrimonioNeto() {
     if (changeCount === 0) {
       setAlert({ type: 'info', message: 'No se detectaron cambios para guardar.' });
       setTimeout(() => setAlert(null), 3000);
+      return;
+    }
+
+    // Snapshot de hoy en networthHistory (alimenta las gráficas de Resumen).
+    try {
+      await saveToday({
+        ahorro: totals.byCategory.liquidez,
+        inversion: totals.byCategory.inversiones,
+        jubilacion: totals.byCategory.jubilacion,
+        deuda: totals.byCategory.consumo,
+        prestamo: totals.byCategory.prestamos,
+      });
+    } catch (err) {
+      setAlert({ type: 'info', message: `Se guardaron las cuentas, pero falló el registro histórico: ${err.message}` });
+      setTimeout(() => setAlert(null), 5000);
       return;
     }
 
