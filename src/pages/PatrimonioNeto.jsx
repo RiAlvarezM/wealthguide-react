@@ -42,6 +42,7 @@ export default function PatrimonioNeto() {
   // ── local edits are kept in a map: { [id]: newAmount } ──────────────────
   const [edits, setEdits] = useState({});      // pending (unsaved) edits
   const [saved, setSaved] = useState({});      // last-saved snapshot of edits
+  const [checkedFields, setCheckedFields] = useState({}); // { [id]: true } → field locked/confirmed for today's record
   const [alert, setAlert] = useState(null);
 
   const [entries, setEntries] = useState([
@@ -114,6 +115,10 @@ export default function PatrimonioNeto() {
     setEdits((prev) => ({ ...prev, [id]: cleaned }));
   };
 
+  const handleCheckToggle = (id) => {
+    setCheckedFields((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const handleSave = (e) => {
     e.preventDefault();
 
@@ -157,6 +162,7 @@ export default function PatrimonioNeto() {
     }
     setSaved(newSaved);
     setEdits({});
+    setCheckedFields({});
 
     setEntries((prev) => [...changes, ...prev]);
     setAlert({ type: 'success', message: `¡Registro guardado! Se registraron ${changeCount} ajuste${changeCount !== 1 ? 's' : ''}.` });
@@ -165,6 +171,7 @@ export default function PatrimonioNeto() {
 
   const handleDiscard = () => {
     setEdits({});
+    setCheckedFields({});
     setAlert({ type: 'info', message: 'Se han descartado los cambios no guardados.' });
     setTimeout(() => setAlert(null), 3000);
   };
@@ -285,17 +292,33 @@ export default function PatrimonioNeto() {
                           const displayVal = edits[acc.id] !== undefined
                             ? edits[acc.id]
                             : acc.amount.toLocaleString('en-US');
+                          const isLocked = !!checkedFields[acc.id];
                           return (
                             <div key={acc.id} className="flex flex-col gap-base">
-                              <label className="font-label-md text-label-md text-on-surface">
-                                {acc.name}
-                              </label>
+                              <div className="flex items-center justify-between gap-xs">
+                                <label className="font-label-md text-label-md text-on-surface">
+                                  {acc.name}
+                                </label>
+                                <label
+                                  className="flex items-center gap-xs cursor-pointer select-none"
+                                  title="Marcar como actualizado (bloquea el campo hasta guardar el registro)"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isLocked}
+                                    onChange={() => handleCheckToggle(acc.id)}
+                                    className="w-4 h-4 rounded border-outline-variant text-secondary focus:ring-1 focus:ring-secondary cursor-pointer"
+                                  />
+                                  <span className="font-label-sm text-label-sm text-on-surface-variant">Actualizado</span>
+                                </label>
+                              </div>
                               <div className="relative">
                                 <span className="absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant font-label-md text-label-md">$</span>
                                 <input
-                                  className={`w-full h-10 pl-8 pr-sm bg-surface border border-outline-variant focus:border-on-tertiary-container focus:ring-1 focus:ring-on-tertiary-container rounded text-body-sm text-right font-label-md text-label-md outline-none ${catMeta.isLiability ? 'text-error' : ''}`}
+                                  className={`w-full h-10 pl-8 pr-sm bg-surface border border-outline-variant focus:border-on-tertiary-container focus:ring-1 focus:ring-on-tertiary-container rounded text-body-sm text-right font-label-md text-label-md outline-none ${catMeta.isLiability ? 'text-error' : ''} ${isLocked ? 'opacity-60 cursor-not-allowed bg-surface-container-low' : ''}`}
                                   type="text"
                                   value={displayVal}
+                                  disabled={isLocked}
                                   onChange={(e) => handleInputChange(acc.id, e.target.value)}
                                 />
                               </div>
