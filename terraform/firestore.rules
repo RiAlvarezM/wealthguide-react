@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Dashboard familiar compartido, no multi-tenant: toda cuenta
+    // APROBADA ve y edita la misma información. El registro queda
+    // abierto (cualquiera con el link puede crear cuenta), pero un
+    // usuario recién registrado no tiene acceso a los datos hasta que
+    // el administrador lo apruebe a mano desde la consola de Firebase
+    // (Firestore Database > Datos > users/{uid} > approved = true).
+    // La consola opera con credenciales de administrador de IAM y NO
+    // pasa por estas reglas, así que el admin siempre puede aprobar
+    // aunque el propio usuario no pueda escribirse `approved`.
+    function isApproved() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true;
+    }
+
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // El usuario solo puede crear SU PROPIO doc de perfil, y siempre
+      // arranca en approved = false — nunca puede auto-aprobarse.
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.approved == false;
+
+      // Ni siquiera el propio dueño puede cambiar `approved` — solo el
+      // admin desde la consola (bypassa estas reglas).
+      allow update, delete: if false;
+    }
+
+    match /accounts/{document=**}         { allow read, write: if isApproved(); }
+    match /properties/{document=**}       { allow read, write: if isApproved(); }
+    match /vehicles/{document=**}         { allow read, write: if isApproved(); }
+    match /loyaltyPrograms/{document=**}  { allow read, write: if isApproved(); }
+    match /networthHistory/{document=**}  { allow read, write: if isApproved(); }
+    match /transactions/{document=**}     { allow read, write: if isApproved(); }
+  }
+}
