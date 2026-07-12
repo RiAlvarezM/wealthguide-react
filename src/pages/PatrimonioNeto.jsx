@@ -126,18 +126,20 @@ export default function PatrimonioNeto() {
 
     const changes = [];
     const today = new Date();
-    let changeCount = 0;
+    let touchedCount = 0; // campos editados y/o marcados como "Actualizado"
 
     for (const acc of accounts) {
       const editedRaw = edits[acc.id];
-      if (editedRaw === undefined) continue;
+      const isChecked = !!checkedFields[acc.id];
+      if (editedRaw === undefined && !isChecked) continue;
 
-      const newVal = Number(editedRaw) || 0;
+      touchedCount++;
+
+      const newVal = editedRaw !== undefined ? (Number(editedRaw) || 0) : acc.amount;
       const oldVal = saved[acc.id] !== undefined ? Number(saved[acc.id]) : acc.amount;
-      if (newVal === oldVal) continue;
+      if (newVal === oldVal) continue; // confirmado (checkbox) pero sin cambio de valor
 
       const diff = newVal - oldVal;
-      changeCount++;
       changes.push({
         id: `entry-${Date.now()}-${acc.id}`,
         date: formatDate(today),
@@ -151,8 +153,8 @@ export default function PatrimonioNeto() {
       updateAccount(acc.id, acc.name, newVal);
     }
 
-    if (changeCount === 0) {
-      setAlert({ type: 'info', message: 'No se detectaron cambios para guardar.' });
+    if (touchedCount === 0) {
+      setAlert({ type: 'info', message: 'Marca el campo como Actualizado o cambia un valor antes de guardar.' });
       setTimeout(() => setAlert(null), 3000);
       return;
     }
@@ -172,17 +174,22 @@ export default function PatrimonioNeto() {
       return;
     }
 
-    // Mark as saved
+    // Mark as saved (cuentas editadas y/o confirmadas por checkbox)
     const newSaved = { ...saved };
     for (const acc of accounts) {
-      if (edits[acc.id] !== undefined) newSaved[acc.id] = edits[acc.id];
+      if (edits[acc.id] !== undefined || checkedFields[acc.id]) {
+        newSaved[acc.id] = String(effectiveAmount(acc));
+      }
     }
     setSaved(newSaved);
     setEdits({});
     setCheckedFields({});
 
     setEntries((prev) => [...changes, ...prev]);
-    setAlert({ type: 'success', message: `¡Registro guardado! Se registraron ${changeCount} ajuste${changeCount !== 1 ? 's' : ''}.` });
+    const message = changes.length > 0
+      ? `¡Registro guardado! Se registraron ${changes.length} ajuste${changes.length !== 1 ? 's' : ''}.`
+      : `¡Registro guardado! Se confirmaron ${touchedCount} campo${touchedCount !== 1 ? 's' : ''} sin cambios de valor.`;
+    setAlert({ type: 'success', message });
     setTimeout(() => setAlert(null), 4000);
   };
 
