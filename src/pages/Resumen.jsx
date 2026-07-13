@@ -11,23 +11,6 @@ const RANGE_OPTIONS = ['Últimos 5 Años', 'Últimos 10 Años', 'Todo el Tiempo'
 const formatCurrency = (value) =>
   new Intl.NumberFormat('es-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 
-const KPI_CARDS = [
-  {
-    label: 'Efectivo Disponible',
-    value: '$8,250,000',
-    trend: '+5.2% vs año pasado',
-    trendIcon: 'trending_up',
-    trendColor: 'text-secondary-fixed-dim',
-  },
-  {
-    label: 'Ratio Deuda-Capital',
-    value: '0.18',
-    trend: 'Estable vs año pasado',
-    trendIcon: 'trending_flat',
-    trendColor: 'text-on-surface-variant',
-  },
-];
-
 // Finds the history row whose date is closest to `targetDate`.
 function closestEntry(history, targetDate) {
   return history.reduce((best, row) => {
@@ -57,10 +40,13 @@ function applyPropertiesAndVehicles(history, properties, vehicles) {
   });
 }
 
-function computeNetWorthTrend(history) {
+// Generic month/year trend for any metric derived from a history row
+// (e.g. netWorth, jubilacion, or a combination like ahorro + inversion).
+function computeMetricTrend(history, getValue) {
   if (history.length === 0) return null;
   const latest = history[history.length - 1];
   const latestDate = new Date(latest.date);
+  const latestValue = getValue(latest);
 
   const oneMonthAgo = new Date(latestDate);
   oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
@@ -73,10 +59,37 @@ function computeNetWorthTrend(history) {
   const pctChange = (from, to) => (from === 0 ? 0 : ((to - from) / Math.abs(from)) * 100);
 
   return {
-    latest,
-    vsLastMonth: pctChange(monthAgoEntry.netWorth, latest.netWorth),
-    vsLastYear: pctChange(yearAgoEntry.netWorth, latest.netWorth),
+    value: latestValue,
+    vsLastMonth: pctChange(getValue(monthAgoEntry), latestValue),
+    vsLastYear: pctChange(getValue(yearAgoEntry), latestValue),
   };
+}
+
+// KPI card showing a currency value plus its vs-last-month / vs-last-year trend.
+function KpiTrendCard({ label, trend }) {
+  return (
+    <div className="bg-surface-container-lowest border border-outline-variant rounded p-sm shadow-[0px_10px_15px_-3px_rgba(15,23,42,0.08)]">
+      <div className="font-label-md text-label-md text-on-surface-variant uppercase mb-2">{label}</div>
+      <div className="font-display-lg text-display-lg text-on-surface mb-1">
+        {formatCurrency(trend.value)}
+      </div>
+      <div className="flex flex-col gap-1">
+        {[
+          { label: 'vs mes anterior', pct: trend.vsLastMonth },
+          { label: 'vs año anterior', pct: trend.vsLastYear },
+        ].map((item) => {
+          const icon = item.pct > 0.05 ? 'trending_up' : item.pct < -0.05 ? 'trending_down' : 'trending_flat';
+          const color = item.pct > 0.05 ? 'text-secondary-fixed-dim' : item.pct < -0.05 ? 'text-error' : 'text-on-surface-variant';
+          return (
+            <div key={item.label} className={`flex items-center gap-1 ${color} font-label-sm text-label-sm`}>
+              <span className="material-symbols-outlined text-[16px]">{icon}</span>
+              <span>{item.pct >= 0 ? '+' : ''}{item.pct.toFixed(1)}% {item.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 const netWorthOptions = {
@@ -117,7 +130,12 @@ export default function Resumen() {
     [fullHistory, range]
   );
 
-  const netWorthTrend = useMemo(() => computeNetWorthTrend(fullHistory), [fullHistory]);
+  const netWorthTrend = useMemo(() => computeMetricTrend(fullHistory, (row) => row.netWorth), [fullHistory]);
+  const jubilacionTrend = useMemo(() => computeMetricTrend(fullHistory, (row) => row.jubilacion), [fullHistory]);
+  const liquidezInversionesTrend = useMemo(
+    () => computeMetricTrend(fullHistory, (row) => row.ahorro + row.inversion),
+    [fullHistory]
+  );
 
   const netWorthData = useMemo(() => ({
     labels: filteredHistory.map((row) => formatHistoryLabel(row.date)),
@@ -191,42 +209,9 @@ export default function Resumen() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter">
-        {netWorthTrend && (
-          <div className="bg-surface-container-lowest border border-outline-variant rounded p-sm shadow-[0px_10px_15px_-3px_rgba(15,23,42,0.08)]">
-            <div className="font-label-md text-label-md text-on-surface-variant uppercase mb-2">Patrimonio Neto Total</div>
-            <div className="font-display-lg text-display-lg text-on-surface mb-1">
-              {formatCurrency(netWorthTrend.latest.netWorth)}
-            </div>
-            <div className="flex flex-col gap-1">
-              {[
-                { label: 'vs mes anterior', pct: netWorthTrend.vsLastMonth },
-                { label: 'vs año anterior', pct: netWorthTrend.vsLastYear },
-              ].map((item) => {
-                const icon = item.pct > 0.05 ? 'trending_up' : item.pct < -0.05 ? 'trending_down' : 'trending_flat';
-                const color = item.pct > 0.05 ? 'text-secondary-fixed-dim' : item.pct < -0.05 ? 'text-error' : 'text-on-surface-variant';
-                return (
-                  <div key={item.label} className={`flex items-center gap-1 ${color} font-label-sm text-label-sm`}>
-                    <span className="material-symbols-outlined text-[16px]">{icon}</span>
-                    <span>{item.pct >= 0 ? '+' : ''}{item.pct.toFixed(1)}% {item.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {KPI_CARDS.map((kpi) => (
-          <div
-            key={kpi.label}
-            className="bg-surface-container-lowest border border-outline-variant rounded p-sm shadow-[0px_10px_15px_-3px_rgba(15,23,42,0.08)]"
-          >
-            <div className="font-label-md text-label-md text-on-surface-variant uppercase mb-2">{kpi.label}</div>
-            <div className="font-display-lg text-display-lg text-on-surface mb-1">{kpi.value}</div>
-            <div className={`flex items-center gap-1 ${kpi.trendColor} font-label-sm text-label-sm`}>
-              <span className="material-symbols-outlined text-[16px]">{kpi.trendIcon}</span>
-              <span>{kpi.trend}</span>
-            </div>
-          </div>
-        ))}
+        {netWorthTrend && <KpiTrendCard label="Patrimonio Neto Total" trend={netWorthTrend} />}
+        {jubilacionTrend && <KpiTrendCard label="Jubilación" trend={jubilacionTrend} />}
+        {liquidezInversionesTrend && <KpiTrendCard label="Inversiones + Liquidez" trend={liquidezInversionesTrend} />}
       </div>
 
       {/* Main Charts Area */}
