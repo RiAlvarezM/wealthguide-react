@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import AppLayout from '../components/layout/AppLayout';
 import { useAccounts } from '../context/AccountsContext';
 import { useProperties } from '../context/PropertiesContext';
@@ -8,11 +8,6 @@ import { useNetworthHistory } from '../context/NetworthHistoryContext';
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-const formatDate = (date) => {
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-  return `${date.getDate()} ${months[date.getMonth()]}, ${date.getFullYear()}`;
-};
-
 const formatCurrency = (value) =>
   new Intl.NumberFormat('es-US', {
     style: 'currency',
@@ -46,12 +41,6 @@ export default function PatrimonioNeto() {
   const [saved, setSaved] = useState({});      // last-saved snapshot of edits
   const [checkedFields, setCheckedFields] = useState({}); // { [id]: true } → field locked/confirmed for today's record
   const [alert, setAlert] = useState(null);
-
-  const [entries, setEntries] = useState([
-    { id: 'seed-1', date: '24 Oct, 2023', category: 'Inversiones', type: 'Activo',  adjustment:  4200, newBalance: 450200 },
-    { id: 'seed-2', date: '15 Oct, 2023', category: 'Hipoteca Apto 1', type: 'Pasivo', adjustment: 1850, newBalance: 250000 },
-    { id: 'seed-3', date: '01 Oct, 2023', category: 'Préstamo Carro 1', type: 'Pasivo', adjustment:  650, newBalance:  20000 },
-  ]);
 
   // ── Effective amounts: start from context value, apply local edits ───────
   const effectiveAmount = (acc) =>
@@ -124,8 +113,7 @@ export default function PatrimonioNeto() {
   const handleSave = async (e) => {
     e.preventDefault();
 
-    const changes = [];
-    const today = new Date();
+    let changedCount = 0;
     let touchedCount = 0; // campos editados y/o marcados como "Actualizado"
 
     for (const acc of accounts) {
@@ -139,15 +127,7 @@ export default function PatrimonioNeto() {
       const oldVal = saved[acc.id] !== undefined ? Number(saved[acc.id]) : acc.amount;
       if (newVal === oldVal) continue; // confirmado (checkbox) pero sin cambio de valor
 
-      const diff = newVal - oldVal;
-      changes.push({
-        id: `entry-${Date.now()}-${acc.id}`,
-        date: formatDate(today),
-        category: acc.name,
-        type: acc.type === 'activo' ? 'Activo' : 'Pasivo',
-        adjustment: diff,
-        newBalance: newVal,
-      });
+      changedCount++;
 
       // Persist to context
       updateAccount(acc.id, acc.name, newVal);
@@ -185,9 +165,8 @@ export default function PatrimonioNeto() {
     setEdits({});
     setCheckedFields({});
 
-    setEntries((prev) => [...changes, ...prev]);
-    const message = changes.length > 0
-      ? `¡Registro guardado! Se registraron ${changes.length} ajuste${changes.length !== 1 ? 's' : ''}.`
+    const message = changedCount > 0
+      ? `¡Registro guardado! Se registraron ${changedCount} ajuste${changedCount !== 1 ? 's' : ''}.`
       : `¡Registro guardado! Se confirmaron ${touchedCount} campo${touchedCount !== 1 ? 's' : ''} sin cambios de valor.`;
     setAlert({ type: 'success', message });
     setTimeout(() => setAlert(null), 4000);
@@ -199,24 +178,6 @@ export default function PatrimonioNeto() {
     setAlert({ type: 'info', message: 'Se han descartado los cambios no guardados.' });
     setTimeout(() => setAlert(null), 3000);
   };
-
-  const handleExportCSV = useCallback(() => {
-    const headers = ['Fecha', 'Categoría', 'Tipo', 'Ajuste', 'Nuevo Saldo'];
-    const rows = entries.map((e) => [
-      e.date, e.category, e.type,
-      (e.adjustment >= 0 ? '+' : '') + e.adjustment,
-      e.newBalance,
-    ]);
-    const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `patrimonio_neto_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }, [entries]);
 
   // ── Grouped accounts by category ──────────────────────────────────────────
   const accountsByCategory = useMemo(() => {
@@ -378,51 +339,6 @@ export default function PatrimonioNeto() {
                 </div>
               </form>
             )}
-          </div>
-
-          {/* Adjustments history table */}
-          <div className="bg-surface-container-lowest rounded-lg border border-outline-variant p-lg shadow-sm">
-            <div className="flex items-center justify-between mb-md">
-              <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider">Ajustes Recientes</h3>
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                className="flex items-center gap-xs px-sm py-xs bg-surface border border-outline-variant text-on-surface rounded font-label-md text-label-md hover:bg-surface-container-low transition-colors h-8 outline-none"
-              >
-                <span className="material-symbols-outlined text-[16px]">download</span>
-                Exportar CSV
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-surface border-b border-outline-variant">
-                    {['Fecha','Categoría','Tipo','Ajuste','Nuevo Saldo'].map((h, i) => (
-                      <th key={h} className={`py-sm px-sm font-label-sm text-label-sm text-on-surface-variant uppercase ${i > 2 ? 'text-right' : ''}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="font-body-sm text-body-sm">
-                  {entries.map((entry) => (
-                    <tr key={entry.id} className="border-b border-outline-variant/30 hover:bg-surface-container-low/50 transition-colors">
-                      <td className="py-sm px-sm text-on-surface">{entry.date}</td>
-                      <td className="py-sm px-sm font-label-md text-label-md text-on-surface">{entry.category}</td>
-                      <td className="py-sm px-sm">
-                        <span className={`px-xs py-base rounded text-xs font-label-sm ${entry.type === 'Activo' ? 'bg-secondary-container/20 text-on-secondary-container' : 'bg-error-container/20 text-error'}`}>
-                          {entry.type}
-                        </span>
-                      </td>
-                      <td className={`py-sm px-sm text-right font-label-md font-bold ${entry.adjustment >= 0 ? 'text-secondary' : 'text-error'}`}>
-                        {entry.adjustment >= 0 ? '+' : ''}{formatCurrency(entry.adjustment)}
-                      </td>
-                      <td className={`py-sm px-sm text-right font-label-md text-label-md ${entry.type === 'Pasivo' ? 'text-error' : 'text-on-surface'}`}>
-                        {formatCurrency(entry.newBalance)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
         </div>
 
