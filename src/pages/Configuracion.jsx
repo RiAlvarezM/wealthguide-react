@@ -8,27 +8,6 @@ import { useLoyalty, LOYALTY_GROUPS } from '../context/LoyaltyContext';
 
 const TABS = ['Perfil y Acceso', 'Cuentas', 'Tarjetas de Crédito', 'Programas de Lealtad', 'Vehículos', 'Propiedades'];
 
-const ACTIVE_USERS = [
-  {
-    id: 1,
-    initials: 'EV',
-    name: 'Eleanor Vance',
-    email: 'e.vance@familyoffice.co',
-    role: 'Administrador',
-    lastAccess: 'Hoy, 09:41 AM',
-    status: 'Activo',
-  },
-  {
-    id: 2,
-    initials: 'RJ',
-    name: 'Robert Jenson',
-    email: 'r.jenson@legal.co',
-    role: 'Espectador (Impuestos)',
-    lastAccess: '12 Oct, 2023',
-    status: 'Activo',
-  },
-];
-
 export default function Configuracion() {
   const { user, logout } = useAuthContext();
   const { accounts, addAccount, updateAccount, toggleAccountActive, deleteAccount } = useAccounts();
@@ -1225,75 +1204,6 @@ export default function Configuracion() {
           La sección "{activeTab}" está pendiente de implementación.
         </div>
       )}
-
-      {/* Active Users Table (siempre visible como en el diseño original) */}
-      <div className="bg-surface-container-lowest border border-outline-variant rounded shadow-sm overflow-hidden">
-        <div className="p-lg border-b border-outline-variant flex justify-between items-center bg-surface">
-          <div>
-            <h3 className="font-headline-md text-headline-md text-on-surface">Usuarios Activos</h3>
-            <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Miembros con acceso a este portafolio.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="h-10 px-sm rounded font-label-md bg-secondary text-on-secondary hover:bg-secondary/90 transition-colors flex items-center gap-xs"
-          >
-            <span className="material-symbols-outlined text-[18px]">person_add</span>
-            Invitar Usuario
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#F8FAFC] border-b border-outline-variant">
-                <th className="py-sm px-lg font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                  Usuario
-                </th>
-                <th className="py-sm px-lg font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                  Rol
-                </th>
-                <th className="py-sm px-lg font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                  Último Acceso
-                </th>
-                <th className="py-sm px-lg font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
-                  Estado
-                </th>
-                <th className="py-sm px-lg text-right" />
-              </tr>
-            </thead>
-            <tbody className="font-body-sm text-body-sm">
-              {ACTIVE_USERS.map((u) => (
-                <tr key={u.id} className="border-b border-outline-variant/50 hover:bg-[#F8FAFC] transition-colors">
-                  <td className="py-sm px-lg">
-                    <div className="flex items-center gap-sm">
-                      <div className="w-8 h-8 rounded bg-primary-container text-white flex items-center justify-center font-bold text-xs">
-                        {u.initials}
-                      </div>
-                      <div>
-                        <p className="font-bold text-on-surface">{u.name}</p>
-                        <p className="text-on-surface-variant text-xs">{u.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-sm px-lg text-on-surface">{u.role}</td>
-                  <td className="py-sm px-lg text-on-surface-variant">{u.lastAccess}</td>
-                  <td className="py-sm px-lg">
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-secondary-container/30 text-secondary text-xs font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-secondary" /> {u.status}
-                    </span>
-                  </td>
-                  <td className="py-sm px-lg text-right">
-                    <button type="button" className="text-outline hover:text-primary transition-colors">
-                      <span className="material-symbols-outlined">more_vert</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </AppLayout>
   );
 }
