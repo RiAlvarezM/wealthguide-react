@@ -102,7 +102,8 @@ export default function PatrimonioNeto() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleInputChange = (id, rawValue) => {
-    const cleaned = rawValue.replace(/[^0-9.]/g, '');
+    // Permitir guion negativo únicamente al inicio y números/puntos
+    const cleaned = rawValue.replace(/(?!^-)[^0-9.]/g, '');
     setEdits((prev) => ({ ...prev, [id]: cleaned }));
   };
 

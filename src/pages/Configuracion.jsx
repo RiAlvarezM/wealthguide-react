@@ -419,7 +419,6 @@ export default function Configuracion() {
                   <span className="absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant font-label-sm">$</span>
                   <input
                     type="number"
-                    min="0"
                     step="0.01"
                     placeholder="0.00"
                     value={newAccForm.amount}
@@ -506,7 +505,6 @@ export default function Configuracion() {
                                 <span className="absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant font-label-sm">$</span>
                                 <input
                                   type="number"
-                                  min="0"
                                   step="0.01"
                                   value={editAccForm.amount}
                                   onChange={e => setEditAccForm(p => ({ ...p, amount: e.target.value }))}
