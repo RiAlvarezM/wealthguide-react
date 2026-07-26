@@ -286,7 +286,7 @@ export default function PatrimonioNeto() {
                         {catAccounts.map((acc) => {
                           const displayVal = edits[acc.id] !== undefined
                             ? edits[acc.id]
-                            : acc.amount.toLocaleString('en-US');
+                            : String(acc.amount);
                           const isLocked = !!checkedFields[acc.id];
                           return (
                             <div key={acc.id} className="flex flex-col gap-base">
