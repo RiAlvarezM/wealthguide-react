@@ -102,8 +102,17 @@ export default function PatrimonioNeto() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleInputChange = (id, rawValue) => {
-    // Permitir guion negativo únicamente al inicio y números/puntos
-    const cleaned = rawValue.replace(/(?!^-)[^0-9.]/g, '');
+    // Permitir guión al inicio, dígitos y un único punto decimal
+    let cleaned = rawValue.replace(/[^0-9.-]/g, '');
+    // Si hay un guión, solo mantenerlo si está al inicio
+    const isNegative = cleaned.startsWith('-');
+    cleaned = cleaned.replace(/-/g, '');
+    if (isNegative) cleaned = '-' + cleaned;
+    // Evitar múltiples puntos decimales
+    const parts = cleaned.split('.');
+    if (parts.length > 2) {
+      cleaned = parts[0] + '.' + parts.slice(1).join('');
+    }
     setEdits((prev) => ({ ...prev, [id]: cleaned }));
   };
 
