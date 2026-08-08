@@ -65,6 +65,19 @@ function computeMetricTrend(history, getValue) {
   };
 }
 
+// Small stat tile showing a category label, its color dot and current amount.
+function TypeAmountCard({ label, color, amount }) {
+  return (
+    <div className="bg-surface-container-lowest border border-outline-variant rounded p-sm shadow-[0px_10px_15px_-3px_rgba(15,23,42,0.08)] flex items-center justify-between">
+      <div className="flex items-center gap-xs">
+        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
+        <span className="font-body-sm text-body-sm text-on-surface">{label}</span>
+      </div>
+      <span className="font-label-md text-label-md text-on-surface">{formatCurrency(amount)}</span>
+    </div>
+  );
+}
+
 // KPI card showing a currency value plus its vs-last-month / vs-last-year trend.
 function KpiTrendCard({ label, trend }) {
   return (
@@ -136,6 +149,29 @@ export default function Resumen() {
     () => computeMetricTrend(fullHistory, (row) => row.ahorro + row.inversion),
     [fullHistory]
   );
+
+  // Montos totales por tipo (categoría), a partir del registro más reciente.
+  const propiedadesTotal = useMemo(
+    () => properties.reduce((sum, p) => sum + p.value, 0),
+    [properties]
+  );
+  const vehiculosTotal = useMemo(
+    () => vehicles.reduce((sum, v) => sum + estimateCurrentValue(v), 0),
+    [vehicles]
+  );
+  const typeAmounts = useMemo(() => {
+    const latest = fullHistory[fullHistory.length - 1];
+    if (!latest) return null;
+    return {
+      liquidez: latest.ahorro,
+      inversiones: latest.inversion,
+      jubilacion: latest.jubilacion,
+      propiedades: propiedadesTotal,
+      vehiculos: vehiculosTotal,
+      prestamos: latest.prestamo,
+      consumo: latest.deuda,
+    };
+  }, [fullHistory, propiedadesTotal, vehiculosTotal]);
 
   const netWorthData = useMemo(() => ({
     labels: filteredHistory.map((row) => formatHistoryLabel(row.date)),
@@ -213,6 +249,22 @@ export default function Resumen() {
         {jubilacionTrend && <KpiTrendCard label="Jubilación" trend={jubilacionTrend} />}
         {liquidezInversionesTrend && <KpiTrendCard label="Inversiones + Liquidez" trend={liquidezInversionesTrend} />}
       </div>
+
+      {/* Montos Totales por Tipo */}
+      {typeAmounts && (
+        <div className="bg-surface-container-lowest border border-outline-variant rounded p-sm shadow-[0px_10px_15px_-3px_rgba(15,23,42,0.08)]">
+          <h2 className="font-headline-md text-headline-md text-on-surface mb-md">Montos Totales por Tipo</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-sm">
+            <TypeAmountCard label="Liquidez"           color="#c6c6cd" amount={typeAmounts.liquidez}    />
+            <TypeAmountCard label="Inversiones"         color="#131b2e" amount={typeAmounts.inversiones} />
+            <TypeAmountCard label="Jubilación"          color="#006a61" amount={typeAmounts.jubilacion}  />
+            <TypeAmountCard label="Propiedades"         color="#f59e0b" amount={typeAmounts.propiedades} />
+            <TypeAmountCard label="Automóviles"         color="#8b5cf6" amount={typeAmounts.vehiculos}   />
+            <TypeAmountCard label="Préstamos"           color="#ffdad6" amount={typeAmounts.prestamos}   />
+            <TypeAmountCard label="Deudas de Consumo"   color="#ba1a1a" amount={typeAmounts.consumo}     />
+          </div>
+        </div>
+      )}
 
       {/* Main Charts Area */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-gutter">

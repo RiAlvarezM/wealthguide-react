@@ -373,20 +373,23 @@ export default function PatrimonioNeto() {
             </div>
             <div className="w-full space-y-sm">
               {[
-                { label: 'Jubilación',         color: '#006a61', pct: totals.pctJubilacion  },
-                { label: 'Inversiones',         color: '#131b2e', pct: totals.pctInversiones },
-                { label: 'Liquidez',            color: '#c6c6cd', pct: totals.pctLiquidez    },
-                { label: 'Propiedades',         color: '#f59e0b', pct: totals.pctPropiedades },
-                { label: 'Automóviles',          color: '#8b5cf6', pct: totals.pctVehiculos   },
-                { label: 'Préstamos',           color: '#ffdad6', pct: totals.pctPrestamos   },
-                { label: 'Deudas de Consumo',  color: '#ba1a1a', pct: totals.pctConsumo     },
+                { label: 'Jubilación',         color: '#006a61', pct: totals.pctJubilacion,  amount: totals.byCategory.jubilacion  },
+                { label: 'Inversiones',         color: '#131b2e', pct: totals.pctInversiones, amount: totals.byCategory.inversiones },
+                { label: 'Liquidez',            color: '#c6c6cd', pct: totals.pctLiquidez,    amount: totals.byCategory.liquidez    },
+                { label: 'Propiedades',         color: '#f59e0b', pct: totals.pctPropiedades, amount: propiedadesTotal              },
+                { label: 'Automóviles',          color: '#8b5cf6', pct: totals.pctVehiculos,   amount: vehiculosTotal                },
+                { label: 'Préstamos',           color: '#ffdad6', pct: totals.pctPrestamos,   amount: totals.byCategory.prestamos   },
+                { label: 'Deudas de Consumo',  color: '#ba1a1a', pct: totals.pctConsumo,     amount: totals.byCategory.consumo     },
               ].map((item) => (
                 <div key={item.label} className="flex items-center justify-between">
                   <div className="flex items-center gap-xs">
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
                     <span className="font-body-sm text-body-sm text-on-surface">{item.label}</span>
                   </div>
-                  <span className="font-label-md text-label-md text-on-surface">{item.pct}%</span>
+                  <div className="flex items-baseline gap-xs">
+                    <span className="font-label-sm text-label-sm text-on-surface-variant">{formatCurrency(item.amount)}</span>
+                    <span className="font-label-md text-label-md text-on-surface">{item.pct}%</span>
+                  </div>
                 </div>
               ))}
             </div>
