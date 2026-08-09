@@ -5,6 +5,10 @@ import { useTransactions } from '../hooks/useTransactions';
 import { useAccounts } from '../context/AccountsContext';
 
 const MIN_ROWS = 10;
+const DEFAULT_CUTOFF_DAY = '12';
+const DEFAULT_INCOME_DAY = '14';
+const ACP_AMOUNT = 1491.96;
+const COPA_AMOUNT = 1466.55;
 
 function formatCurrency(value) {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -121,6 +125,11 @@ export default function EfectivoDiario() {
   );
   const { accounts } = useAccounts();
 
+  const consumoAccounts = useMemo(
+    () => accounts.filter((acc) => acc.category === 'consumo' && acc.active !== false),
+    [accounts]
+  );
+
   // Saldo inicial del flujo: liquidez actual (cuentas activas categoría "liquidez"),
   // pero editable por si el usuario quiere ajustarlo manualmente para el mes.
   const liquidezTotal = useMemo(
@@ -133,42 +142,53 @@ export default function EfectivoDiario() {
 
   const now = new Date();
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const openingBalanceStorageKey = `efectivoDiario:saldoInicial:${currentMonthKey}`;
+
+  const storageKey = (name) => `efectivoDiario:${name}:${currentMonthKey}`;
 
   const [openingBalanceOverride, setOpeningBalanceOverride] = useState(() => {
-    const stored = localStorage.getItem(openingBalanceStorageKey);
+    const stored = localStorage.getItem(storageKey('saldoInicial'));
     return stored !== null ? Number(stored) : null;
   });
   const [openingBalanceInput, setOpeningBalanceInput] = useState('');
+  const [cutoffDay, setCutoffDay] = useState(
+    () => localStorage.getItem(storageKey('cutoffDay')) || DEFAULT_CUTOFF_DAY
+  );
+  const [incomeDay, setIncomeDay] = useState(
+    () => localStorage.getItem(storageKey('incomeDay')) || DEFAULT_INCOME_DAY
+  );
+  const [sortDir, setSortDir] = useState('asc');
 
   useEffect(() => {
-    const stored = localStorage.getItem(openingBalanceStorageKey);
+    const stored = localStorage.getItem(storageKey('saldoInicial'));
     setOpeningBalanceOverride(stored !== null ? Number(stored) : null);
-  }, [openingBalanceStorageKey]);
+    setCutoffDay(localStorage.getItem(storageKey('cutoffDay')) || DEFAULT_CUTOFF_DAY);
+    setIncomeDay(localStorage.getItem(storageKey('incomeDay')) || DEFAULT_INCOME_DAY);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonthKey]);
 
   const effectiveOpeningBalance = openingBalanceOverride ?? liquidezTotal;
 
   const commitOpeningBalance = () => {
     if (openingBalanceInput.trim() === '') {
-      localStorage.removeItem(openingBalanceStorageKey);
+      localStorage.removeItem(storageKey('saldoInicial'));
       setOpeningBalanceOverride(null);
       return;
     }
     const value = parseFloat(openingBalanceInput);
     if (Number.isNaN(value)) return;
-    localStorage.setItem(openingBalanceStorageKey, String(value));
+    localStorage.setItem(storageKey('saldoInicial'), String(value));
     setOpeningBalanceOverride(value);
   };
 
   const [extraRows, setExtraRows] = useState(0);
 
-  // Movimientos del mes en curso, ordenados cronológicamente, con saldo corrido
+  // Movimientos del mes en curso, ordenables por fecha, con saldo corrido
   // que arranca en el saldo inicial (editable) del mes.
   const monthRows = useMemo(() => {
     const monthTx = transactions
       .filter((t) => t.date && t.date.startsWith(currentMonthKey))
       .sort((a, b) => {
-        if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+        if (a.date !== b.date) return sortDir === 'asc' ? (a.date < b.date ? -1 : 1) : (a.date < b.date ? 1 : -1);
         return (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
       });
 
@@ -177,13 +197,67 @@ export default function EfectivoDiario() {
       running += t.amount || 0;
       return { ...t, saldo: running };
     });
-  }, [transactions, currentMonthKey, effectiveOpeningBalance]);
+  }, [transactions, currentMonthKey, effectiveOpeningBalance, sortDir]);
 
   const draftCount = Math.max(0, MIN_ROWS - monthRows.length) + extraRows;
 
+  // Genera las líneas por defecto del mes: pago de cada tarjeta (Deudas de
+  // Consumo, tomando el saldo actual de Patrimonio Neto) en la fecha de corte,
+  // y los ingresos recurrentes de ACP/Copa en la fecha de ingreso.
+  const seedDefaults = async (cutoff, income) => {
+    const cutoffDate = `${currentMonthKey}-${String(cutoff).padStart(2, '0')}`;
+    const incomeDate = `${currentMonthKey}-${String(income).padStart(2, '0')}`;
+
+    await Promise.all(
+      consumoAccounts.map((acc) =>
+        addTransaction({
+          date: cutoffDate,
+          description: `Pago ${acc.name}`,
+          amount: -Math.abs(acc.amount),
+        })
+      )
+    );
+    await addTransaction({ date: incomeDate, description: 'ACP', amount: ACP_AMOUNT });
+    await addTransaction({ date: incomeDate, description: 'ACP', amount: ACP_AMOUNT });
+    await addTransaction({ date: incomeDate, description: 'Copa', amount: COPA_AMOUNT });
+
+    localStorage.setItem(storageKey('seeded'), 'true');
+  };
+
+  // Sembrar por defecto una sola vez por mes, si todavía no hay movimientos
+  // registrados y el usuario no ha reiniciado/limpiado el mes a propósito.
+  useEffect(() => {
+    if (loading) return;
+    const alreadySeeded = localStorage.getItem(storageKey('seeded')) === 'true';
+    const monthTxCount = transactions.filter((t) => t.date && t.date.startsWith(currentMonthKey)).length;
+    if (!alreadySeeded && monthTxCount === 0 && consumoAccounts.length > 0) {
+      seedDefaults(cutoffDay, incomeDay);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, currentMonthKey, consumoAccounts.length]);
+
+  const handleReset = async () => {
+    const confirmed = window.confirm(
+      'Esto borra todos los movimientos del mes en curso y los reemplaza por el estado inicial (saldo de liquidez, pagos de tarjeta y los ingresos de ACP/Copa). ¿Continuar?'
+    );
+    if (!confirmed) return;
+
+    await Promise.all(monthRows.map((row) => deleteTransaction(row.id)));
+
+    localStorage.removeItem(storageKey('saldoInicial'));
+    setOpeningBalanceOverride(null);
+    localStorage.setItem(storageKey('cutoffDay'), DEFAULT_CUTOFF_DAY);
+    localStorage.setItem(storageKey('incomeDay'), DEFAULT_INCOME_DAY);
+    setCutoffDay(DEFAULT_CUTOFF_DAY);
+    setIncomeDay(DEFAULT_INCOME_DAY);
+    localStorage.removeItem(storageKey('seeded'));
+
+    await seedDefaults(DEFAULT_CUTOFF_DAY, DEFAULT_INCOME_DAY);
+  };
+
   return (
     <AppLayout title="Efectivo Diario" searchPlaceholder="Buscar movimientos...">
-      <header className="mb-lg flex flex-col sm:flex-row sm:items-end sm:justify-between gap-md">
+      <header className="mb-lg flex flex-col lg:flex-row lg:items-end lg:justify-between gap-md">
         <div>
           <h1 className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background">
             Flujo Mensual
@@ -193,34 +267,46 @@ export default function EfectivoDiario() {
             ingreso o gasto.
           </p>
         </div>
-        <div className="flex flex-col items-start sm:items-end gap-xs shrink-0">
-          <label className="font-label-sm text-label-sm text-on-surface-variant uppercase">
-            Saldo inicial del mes
-          </label>
-          <input
-            type="number"
-            step="0.01"
-            value={openingBalanceInput !== '' ? openingBalanceInput : effectiveOpeningBalance}
-            onFocus={() => setOpeningBalanceInput(String(effectiveOpeningBalance))}
-            onChange={(e) => setOpeningBalanceInput(e.target.value)}
-            onBlur={() => {
-              commitOpeningBalance();
-              setOpeningBalanceInput('');
-            }}
-            className="h-10 w-40 px-sm border border-outline-variant rounded text-right font-bold text-on-background"
-          />
-          {openingBalanceOverride !== null && (
-            <button
-              type="button"
-              onClick={() => {
-                localStorage.removeItem(openingBalanceStorageKey);
-                setOpeningBalanceOverride(null);
+        <div className="flex flex-wrap items-end gap-md shrink-0">
+          <div className="flex flex-col gap-xs">
+            <label className="font-label-sm text-label-sm text-on-surface-variant uppercase">
+              Corte tarjetas (día)
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="31"
+              value={cutoffDay}
+              onChange={(e) => {
+                setCutoffDay(e.target.value);
+                localStorage.setItem(storageKey('cutoffDay'), e.target.value);
               }}
-              className="font-label-sm text-label-sm text-secondary hover:underline"
-            >
-              Usar liquidez actual ({formatCurrency(liquidezTotal)})
-            </button>
-          )}
+              className="h-10 w-20 px-sm border border-outline-variant rounded text-right"
+            />
+          </div>
+          <div className="flex flex-col gap-xs">
+            <label className="font-label-sm text-label-sm text-on-surface-variant uppercase">
+              ACP/Copa (día)
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="31"
+              value={incomeDay}
+              onChange={(e) => {
+                setIncomeDay(e.target.value);
+                localStorage.setItem(storageKey('incomeDay'), e.target.value);
+              }}
+              className="h-10 w-20 px-sm border border-outline-variant rounded text-right"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="h-10 px-md border border-outline-variant text-on-surface-variant rounded font-label-md text-label-md hover:bg-surface-container-low transition-colors outline-none"
+          >
+            Reiniciar estado inicial
+          </button>
         </div>
       </header>
 
@@ -229,7 +315,18 @@ export default function EfectivoDiario() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-bright border-b border-outline-variant font-label-sm text-label-sm text-on-surface-variant uppercase">
-                <th className="p-sm font-medium">Fecha</th>
+                <th className="p-sm font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                    className="flex items-center gap-base hover:text-on-background transition-colors"
+                  >
+                    Fecha
+                    <span className="material-symbols-outlined text-[16px]">
+                      {sortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+                    </span>
+                  </button>
+                </th>
                 <th className="p-sm font-medium">Detalle</th>
                 <th className="p-sm font-medium text-right">Ingreso</th>
                 <th className="p-sm font-medium text-right">Gasto</th>
@@ -238,6 +335,41 @@ export default function EfectivoDiario() {
               </tr>
             </thead>
             <tbody className="font-body-sm text-body-sm divide-y divide-outline-variant/50">
+              <tr className="bg-surface-container-low">
+                <td className="p-sm text-on-surface-variant">Inicio</td>
+                <td className="p-sm font-medium text-on-background">Saldo Inicial</td>
+                <td className="p-sm text-right text-on-surface-variant"></td>
+                <td className="p-sm text-right text-on-surface-variant"></td>
+                <td className="p-sm text-right">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={openingBalanceInput !== '' ? openingBalanceInput : effectiveOpeningBalance}
+                    onFocus={() => setOpeningBalanceInput(String(effectiveOpeningBalance))}
+                    onChange={(e) => setOpeningBalanceInput(e.target.value)}
+                    onBlur={() => {
+                      commitOpeningBalance();
+                      setOpeningBalanceInput('');
+                    }}
+                    className="bg-transparent w-full text-right outline-none font-bold text-on-background"
+                  />
+                </td>
+                <td className="p-sm text-right">
+                  {openingBalanceOverride !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.removeItem(storageKey('saldoInicial'));
+                        setOpeningBalanceOverride(null);
+                      }}
+                      title={`Usar liquidez actual (${formatCurrency(liquidezTotal)})`}
+                      className="text-outline hover:text-secondary transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                    </button>
+                  )}
+                </td>
+              </tr>
               {loading && (
                 <tr>
                   <td className="p-sm text-on-surface-variant" colSpan={6}>
