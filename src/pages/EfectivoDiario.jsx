@@ -1,300 +1,282 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import AppLayout from '../components/layout/AppLayout';
 import { useAuthContext } from '../context/AuthContext';
 import { useTransactions } from '../hooks/useTransactions';
+import { useAccounts } from '../context/AccountsContext';
 
-const CATEGORY_OPTIONS = [
-  'Ingresos',
-  'Vivienda',
-  'Abarrotes',
-  'Salud y Bienestar',
-  'Transporte',
-  'Entretenimiento',
-  'Otro',
-];
+const MIN_ROWS = 10;
 
 function formatCurrency(value) {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
-export default function EfectivoDiario() {
-  const { user } = useAuthContext();
-  const { transactions, loading, totals, addTransaction, deleteTransaction } = useTransactions(
-    user?.uid
-  );
+// '2026-08-14' -> '14/8/26'
+function formatDateDisplay(isoDate) {
+  if (!isoDate) return '';
+  const [y, m, d] = isoDate.split('-');
+  return `${Number(d)}/${Number(m)}/${y.slice(2)}`;
+}
 
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    date: '',
-    description: '',
-    category: CATEGORY_OPTIONS[0],
-    account: 'Corriente Principal',
-    amount: '',
-    type: 'expense', // 'expense' | 'income'
-  });
+// '14/8/26' o '14/08/2026' -> '2026-08-14'
+function parseDateDisplay(value) {
+  const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!match) return null;
+  let [, d, m, y] = match;
+  if (y.length === 2) y = `20${y}`;
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
+function EditableRow({ row, saldo, onCommit, onDelete }) {
+  const [date, setDate] = useState(formatDateDisplay(row?.date));
+  const [description, setDescription] = useState(row?.description || '');
+  const [ingreso, setIngreso] = useState(row?.amount > 0 ? String(row.amount) : '');
+  const [gasto, setGasto] = useState(row?.amount < 0 ? String(Math.abs(row.amount)) : '');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const numericAmount = Math.abs(parseFloat(form.amount || '0'));
-    if (!form.date || !form.description || !numericAmount) return;
+  useEffect(() => {
+    setDate(formatDateDisplay(row?.date));
+    setDescription(row?.description || '');
+    setIngreso(row?.amount > 0 ? String(row.amount) : '');
+    setGasto(row?.amount < 0 ? String(Math.abs(row.amount)) : '');
+  }, [row?.id, row?.date, row?.description, row?.amount]);
 
-    await addTransaction({
-      date: form.date,
-      description: form.description,
-      category: form.category,
-      account: form.account,
-      type: form.type,
-      amount: form.type === 'expense' ? -numericAmount : numericAmount,
-    });
-
-    setForm({
-      date: '',
-      description: '',
-      category: CATEGORY_OPTIONS[0],
-      account: 'Corriente Principal',
-      amount: '',
-      type: 'expense',
-    });
-    setShowForm(false);
+  const commit = () => {
+    const isoDate = parseDateDisplay(date);
+    if (!isoDate || !description) return;
+    const amount = ingreso ? Math.abs(parseFloat(ingreso)) : gasto ? -Math.abs(parseFloat(gasto)) : 0;
+    if (row && isoDate === row.date && description === row.description && amount === (row.amount || 0)) return;
+    onCommit({ date: isoDate, description, amount });
   };
 
   return (
-    <AppLayout title="Efectivo Diario" searchPlaceholder="Buscar cuentas, transacciones...">
-      <header className="mb-lg">
-        <h1 className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background">
-          Flujo Mensual
-        </h1>
-        <p className="font-body-md text-body-md text-on-surface-variant mt-xs">
-          Análisis de liquidez actual y obligaciones a corto plazo.
-        </p>
+    <tr className="hover:bg-surface-container-low transition-colors group">
+      <td className="p-sm">
+        <input
+          type="text"
+          value={date}
+          placeholder="dd/mm/yy"
+          onChange={(e) => setDate(e.target.value)}
+          onBlur={commit}
+          className="bg-transparent w-24 outline-none text-on-surface-variant placeholder:text-outline"
+        />
+      </td>
+      <td className="p-sm">
+        <input
+          type="text"
+          value={description}
+          placeholder="Detalle"
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={commit}
+          className="bg-transparent w-full outline-none font-medium text-on-background group-hover:text-tertiary-container transition-colors placeholder:text-outline placeholder:font-normal"
+        />
+      </td>
+      <td className="p-sm text-right">
+        <input
+          type="number"
+          step="0.01"
+          value={ingreso}
+          onChange={(e) => {
+            setIngreso(e.target.value);
+            if (e.target.value) setGasto('');
+          }}
+          onBlur={commit}
+          className="bg-transparent w-full text-right outline-none text-secondary"
+        />
+      </td>
+      <td className="p-sm text-right">
+        <input
+          type="number"
+          step="0.01"
+          value={gasto}
+          onChange={(e) => {
+            setGasto(e.target.value);
+            if (e.target.value) setIngreso('');
+          }}
+          onBlur={commit}
+          className="bg-transparent w-full text-right outline-none text-error"
+        />
+      </td>
+      <td className="p-sm text-right font-bold text-on-background">
+        {row ? formatCurrency(saldo) : ''}
+      </td>
+      <td className="p-sm text-right">
+        {row && (
+          <button
+            type="button"
+            onClick={() => onDelete(row.id)}
+            className="text-outline hover:text-error transition-colors"
+            aria-label={`Eliminar movimiento ${row.description}`}
+          >
+            <span className="material-symbols-outlined text-[18px]">delete</span>
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+export default function EfectivoDiario() {
+  const { user } = useAuthContext();
+  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction } = useTransactions(
+    user?.uid
+  );
+  const { accounts } = useAccounts();
+
+  // Saldo inicial del flujo: liquidez actual (cuentas activas categoría "liquidez"),
+  // pero editable por si el usuario quiere ajustarlo manualmente para el mes.
+  const liquidezTotal = useMemo(
+    () =>
+      accounts
+        .filter((acc) => acc.category === 'liquidez' && acc.active !== false)
+        .reduce((sum, acc) => sum + acc.amount, 0),
+    [accounts]
+  );
+
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const openingBalanceStorageKey = `efectivoDiario:saldoInicial:${currentMonthKey}`;
+
+  const [openingBalanceOverride, setOpeningBalanceOverride] = useState(() => {
+    const stored = localStorage.getItem(openingBalanceStorageKey);
+    return stored !== null ? Number(stored) : null;
+  });
+  const [openingBalanceInput, setOpeningBalanceInput] = useState('');
+
+  useEffect(() => {
+    const stored = localStorage.getItem(openingBalanceStorageKey);
+    setOpeningBalanceOverride(stored !== null ? Number(stored) : null);
+  }, [openingBalanceStorageKey]);
+
+  const effectiveOpeningBalance = openingBalanceOverride ?? liquidezTotal;
+
+  const commitOpeningBalance = () => {
+    if (openingBalanceInput.trim() === '') {
+      localStorage.removeItem(openingBalanceStorageKey);
+      setOpeningBalanceOverride(null);
+      return;
+    }
+    const value = parseFloat(openingBalanceInput);
+    if (Number.isNaN(value)) return;
+    localStorage.setItem(openingBalanceStorageKey, String(value));
+    setOpeningBalanceOverride(value);
+  };
+
+  const [extraRows, setExtraRows] = useState(0);
+
+  // Movimientos del mes en curso, ordenados cronológicamente, con saldo corrido
+  // que arranca en el saldo inicial (editable) del mes.
+  const monthRows = useMemo(() => {
+    const monthTx = transactions
+      .filter((t) => t.date && t.date.startsWith(currentMonthKey))
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+        return (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0);
+      });
+
+    let running = effectiveOpeningBalance;
+    return monthTx.map((t) => {
+      running += t.amount || 0;
+      return { ...t, saldo: running };
+    });
+  }, [transactions, currentMonthKey, effectiveOpeningBalance]);
+
+  const draftCount = Math.max(0, MIN_ROWS - monthRows.length) + extraRows;
+
+  return (
+    <AppLayout title="Efectivo Diario" searchPlaceholder="Buscar movimientos...">
+      <header className="mb-lg flex flex-col sm:flex-row sm:items-end sm:justify-between gap-md">
+        <div>
+          <h1 className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background">
+            Flujo Mensual
+          </h1>
+          <p className="font-body-md text-body-md text-on-surface-variant mt-xs">
+            Saldo proyectado del mes en curso. Edita las líneas directamente en la tabla: fecha, detalle,
+            ingreso o gasto.
+          </p>
+        </div>
+        <div className="flex flex-col items-start sm:items-end gap-xs shrink-0">
+          <label className="font-label-sm text-label-sm text-on-surface-variant uppercase">
+            Saldo inicial del mes
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            value={openingBalanceInput !== '' ? openingBalanceInput : effectiveOpeningBalance}
+            onFocus={() => setOpeningBalanceInput(String(effectiveOpeningBalance))}
+            onChange={(e) => setOpeningBalanceInput(e.target.value)}
+            onBlur={() => {
+              commitOpeningBalance();
+              setOpeningBalanceInput('');
+            }}
+            className="h-10 w-40 px-sm border border-outline-variant rounded text-right font-bold text-on-background"
+          />
+          {openingBalanceOverride !== null && (
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.removeItem(openingBalanceStorageKey);
+                setOpeningBalanceOverride(null);
+              }}
+              className="font-label-sm text-label-sm text-secondary hover:underline"
+            >
+              Usar liquidez actual ({formatCurrency(liquidezTotal)})
+            </button>
+          )}
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-md">
-        {/* Liquid Assets Overview */}
-        <section className="lg:col-span-8 flex flex-col gap-md">
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm">
-            <div className="flex justify-between items-start mb-md">
-              <div>
-                <h2 className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
-                  Dinero Disponible Ahora
-                </h2>
-                <div className="font-display-lg text-display-lg text-on-background mt-xs">
-                  {formatCurrency(totals.balance)}
-                </div>
-              </div>
-              <span className="material-symbols-outlined text-secondary text-[32px]">
-                account_balance
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-sm shadow-sm">
-              <div className="font-label-sm text-label-sm text-on-surface-variant uppercase mb-xs">
-                Ingresos Totales
-              </div>
-              <div className="font-headline-md text-headline-md">{formatCurrency(totals.income)}</div>
-              <div className="text-body-sm text-secondary mt-base">Este período</div>
-            </div>
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-sm shadow-sm">
-              <div className="font-label-sm text-label-sm text-on-surface-variant uppercase mb-xs">
-                Gastos Totales
-              </div>
-              <div className="font-headline-md text-headline-md">{formatCurrency(totals.expense)}</div>
-              <div className="text-body-sm text-error mt-base">Este período</div>
-            </div>
-            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-sm shadow-sm">
-              <div className="font-label-sm text-label-sm text-on-surface-variant uppercase mb-xs">
-                Balance Neto
-              </div>
-              <div className="font-headline-md text-headline-md">{formatCurrency(totals.balance)}</div>
-              <div className="text-body-sm text-on-surface-variant mt-base">Ingresos - Gastos</div>
-            </div>
-          </div>
-        </section>
-
-        {/* Add transaction card */}
-        <aside className="lg:col-span-4">
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md shadow-sm h-full flex flex-col">
-            <div className="flex items-center justify-between mb-sm">
-              <h2 className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
-                Nueva Transacción
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowForm((v) => !v)}
-                className="text-secondary hover:text-on-secondary-container transition-colors"
-              >
-                <span className="material-symbols-outlined">{showForm ? 'close' : 'add_circle'}</span>
-              </button>
-            </div>
-
-            {showForm ? (
-              <form className="flex flex-col gap-sm" onSubmit={handleSubmit}>
-                <div className="flex gap-sm">
-                  <button
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, type: 'expense' }))}
-                    className={`flex-1 py-1.5 rounded text-label-sm font-label-sm border ${
-                      form.type === 'expense'
-                        ? 'bg-error-container border-error text-on-error-container'
-                        : 'border-outline-variant text-on-surface-variant'
-                    }`}
-                  >
-                    Gasto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, type: 'income' }))}
-                    className={`flex-1 py-1.5 rounded text-label-sm font-label-sm border ${
-                      form.type === 'income'
-                        ? 'bg-secondary-container border-secondary text-on-secondary-container'
-                        : 'border-outline-variant text-on-surface-variant'
-                    }`}
-                  >
-                    Ingreso
-                  </button>
-                </div>
-
-                <input
-                  type="date"
-                  name="date"
-                  value={form.date}
-                  onChange={handleChange}
-                  required
-                  className="border border-outline-variant rounded px-sm py-2 text-body-sm"
-                />
-                <input
-                  type="text"
-                  name="description"
-                  placeholder="Descripción"
-                  value={form.description}
-                  onChange={handleChange}
-                  required
-                  className="border border-outline-variant rounded px-sm py-2 text-body-sm"
-                />
-                <select
-                  name="category"
-                  value={form.category}
-                  onChange={handleChange}
-                  className="border border-outline-variant rounded px-sm py-2 text-body-sm"
-                >
-                  {CATEGORY_OPTIONS.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  name="account"
-                  placeholder="Cuenta"
-                  value={form.account}
-                  onChange={handleChange}
-                  className="border border-outline-variant rounded px-sm py-2 text-body-sm"
-                />
-                <input
-                  type="number"
-                  name="amount"
-                  placeholder="Monto"
-                  min="0"
-                  step="0.01"
-                  value={form.amount}
-                  onChange={handleChange}
-                  required
-                  className="border border-outline-variant rounded px-sm py-2 text-body-sm"
-                />
-                <button
-                  type="submit"
-                  className="mt-xs w-full bg-secondary text-white font-label-md py-2 rounded hover:bg-secondary/90 transition-colors"
-                >
-                  Guardar
-                </button>
-              </form>
-            ) : (
-              <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Registra un gasto o ingreso para verlo reflejado en tu flujo mensual.
-              </p>
-            )}
-          </div>
-        </aside>
-      </div>
-
-      {/* Transactions Table */}
-      <section className="mt-xl">
-        <h2 className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-sm">
-          Transacciones Recientes
-        </h2>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-surface-bright border-b border-outline-variant font-label-sm text-label-sm text-on-surface-variant uppercase">
-                  <th className="p-sm font-medium">Fecha</th>
-                  <th className="p-sm font-medium">Descripción</th>
-                  <th className="p-sm font-medium">Categoría</th>
-                  <th className="p-sm font-medium">Cuenta</th>
-                  <th className="p-sm font-medium text-right">Monto</th>
-                  <th className="p-sm font-medium text-right"></th>
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-bright border-b border-outline-variant font-label-sm text-label-sm text-on-surface-variant uppercase">
+                <th className="p-sm font-medium">Fecha</th>
+                <th className="p-sm font-medium">Detalle</th>
+                <th className="p-sm font-medium text-right">Ingreso</th>
+                <th className="p-sm font-medium text-right">Gasto</th>
+                <th className="p-sm font-medium text-right">Saldo</th>
+                <th className="p-sm font-medium text-right"></th>
+              </tr>
+            </thead>
+            <tbody className="font-body-sm text-body-sm divide-y divide-outline-variant/50">
+              {loading && (
+                <tr>
+                  <td className="p-sm text-on-surface-variant" colSpan={6}>
+                    Cargando movimientos...
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="font-body-sm text-body-sm divide-y divide-outline-variant/50">
-                {loading && (
-                  <tr>
-                    <td className="p-sm text-on-surface-variant" colSpan={6}>
-                      Cargando transacciones...
-                    </td>
-                  </tr>
-                )}
-                {!loading && transactions.length === 0 && (
-                  <tr>
-                    <td className="p-sm text-on-surface-variant" colSpan={6}>
-                      Aún no hay transacciones registradas.
-                    </td>
-                  </tr>
-                )}
-                {transactions.map((t) => (
-                  <tr key={t.id} className="hover:bg-surface-container-low transition-colors group">
-                    <td className="p-sm text-on-surface-variant">{t.date}</td>
-                    <td className="p-sm font-medium text-on-background group-hover:text-tertiary-container transition-colors">
-                      {t.description}
-                    </td>
-                    <td className="p-sm">
-                      <span className="bg-surface-container border border-outline-variant/50 px-2 py-1 rounded text-xs">
-                        {t.category}
-                      </span>
-                    </td>
-                    <td className="p-sm text-on-surface-variant">{t.account}</td>
-                    <td
-                      className={`p-sm text-right font-medium ${
-                        t.amount >= 0 ? 'text-secondary' : 'text-on-background'
-                      }`}
-                    >
-                      {t.amount >= 0 ? '+' : ''}
-                      {formatCurrency(t.amount)}
-                    </td>
-                    <td className="p-sm text-right">
-                      <button
-                        type="button"
-                        onClick={() => deleteTransaction(t.id)}
-                        className="text-outline hover:text-error transition-colors"
-                        aria-label={`Eliminar transacción ${t.description}`}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">delete</span>
-                      </button>
-                    </td>
-                  </tr>
+              )}
+              {!loading &&
+                monthRows.map((row) => (
+                  <EditableRow
+                    key={row.id}
+                    row={row}
+                    saldo={row.saldo}
+                    onCommit={(fields) => updateTransaction(row.id, fields)}
+                    onDelete={deleteTransaction}
+                  />
                 ))}
-              </tbody>
-            </table>
-          </div>
+              {!loading &&
+                Array.from({ length: draftCount }).map((_, i) => (
+                  <EditableRow
+                    key={`draft-${monthRows.length}-${i}`}
+                    row={null}
+                    onCommit={(fields) => addTransaction(fields)}
+                    onDelete={() => {}}
+                  />
+                ))}
+            </tbody>
+          </table>
         </div>
-      </section>
+        <div className="p-sm border-t border-outline-variant">
+          <button
+            type="button"
+            onClick={() => setExtraRows((n) => n + 5)}
+            className="font-label-sm text-label-sm text-secondary hover:underline"
+          >
+            + Agregar más líneas
+          </button>
+        </div>
+      </div>
     </AppLayout>
   );
 }
