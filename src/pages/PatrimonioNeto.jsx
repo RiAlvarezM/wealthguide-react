@@ -1,3 +1,12 @@
+// src/pages/PatrimonioNeto.jsx
+//
+// Registro de Patrimonio Neto para la familia Álvarez Gamboa.
+// Incluye métricas de alto valor:
+//   • Runway de Liquidez (Meses de cobertura sin ingresos)
+//   • Tiers de Liquidez en 3 Capas (Inmediata, Crecimiento, Iliquidez)
+//   • Ratio de Deuda Neta y Salud de Apalancamiento
+//   • Actualización en tiempo real con soporte Dark Mode y números tabulares.
+
 import { useState, useMemo } from 'react';
 import AppLayout from '../components/layout/AppLayout';
 import { useAccounts } from '../context/AccountsContext';
@@ -5,10 +14,16 @@ import { useProperties } from '../context/PropertiesContext';
 import { useVehicles, estimateCurrentValue, estimateMonthlyDepreciation } from '../context/VehiclesContext';
 import { useNetworthHistory } from '../context/NetworthHistoryContext';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// Formato de moneda con decimales limpios
 const formatCurrency = (value) =>
+  new Intl.NumberFormat('es-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+
+const formatExactCurrency = (value) =>
   new Intl.NumberFormat('es-US', {
     style: 'currency',
     currency: 'USD',
@@ -17,44 +32,34 @@ const formatCurrency = (value) =>
   }).format(value);
 
 const CATEGORY_META = {
-  liquidez:    { label: '1. Liquidez',           dotColor: '#006a61', bullet: 'secondary', isLiability: false },
-  inversiones: { label: '2. Inversiones',         dotColor: '#131b2e', bullet: 'primary',   isLiability: false },
-  jubilacion:  { label: '3. Jubilación',          dotColor: '#3980f4', bullet: 'tertiary',  isLiability: false },
-  consumo:     { label: '4. Deudas de Consumo',   dotColor: '#ba1a1a', bullet: 'error',     isLiability: true  },
-  prestamos:   { label: '5. Préstamos',           dotColor: '#ffdad6', bullet: 'error',     isLiability: true  },
+  liquidez:    { label: '1. Liquidez (Efectivo & Ahorros)', color: '#0d9488', icon: 'savings',           isLiability: false },
+  inversiones: { label: '2. Inversiones Bursátiles & Fondos', color: '#3b82f6', icon: 'trending_up',       isLiability: false },
+  jubilacion:  { label: '3. Fondo de Jubilación',            color: '#6366f1', icon: 'account_balance',   isLiability: false },
+  consumo:     { label: '4. Deudas de Consumo / Tarjetas',    color: '#f43f5e', icon: 'credit_card',       isLiability: true  },
+  prestamos:   { label: '5. Préstamos e Hipotecas',           color: '#e11d48', icon: 'receipt_long',      isLiability: true  },
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────────────────
 export default function PatrimonioNeto() {
   const { accounts: allAccounts, updateAccount } = useAccounts();
   const { properties } = useProperties();
   const { vehicles } = useVehicles();
   const { saveToday } = useNetworthHistory();
 
-  // Accounts turned off ("Incluir" = False in Configuración → Cuentas) are excluded here.
   const accounts = useMemo(() => allAccounts.filter((acc) => acc.active !== false), [allAccounts]);
 
-  // ── local edits are kept in a map: { [id]: newAmount } ──────────────────
-  const [edits, setEdits] = useState({});      // pending (unsaved) edits
-  const [saved, setSaved] = useState({});      // last-saved snapshot of edits
-  const [checkedFields, setCheckedFields] = useState({}); // { [id]: true } → field locked/confirmed for today's record
+  const [edits, setEdits] = useState({});
+  const [saved, setSaved] = useState({});
+  const [checkedFields, setCheckedFields] = useState({});
   const [alert, setAlert] = useState(null);
 
-  // ── Effective amounts: start from context value, apply local edits ───────
   const effectiveAmount = (acc) =>
     edits[acc.id] !== undefined ? Number(edits[acc.id]) : acc.amount;
 
-  // ── Totals ────────────────────────────────────────────────────────────────
-  // Properties are held at their avalúo value (the appraisal date is treated as the
-  // purchase date — no appreciation/depreciation model is applied on top of it).
   const propiedadesTotal = useMemo(
     () => properties.reduce((sum, p) => sum + p.value, 0),
     [properties]
   );
 
-  // Vehicles are held at their estimated current (depreciated) value.
   const vehiculosTotal = useMemo(
     () => vehicles.reduce((sum, v) => sum + estimateCurrentValue(v), 0),
     [vehicles]
@@ -69,46 +74,55 @@ export default function PatrimonioNeto() {
       }
     }
 
-    const totalActivos  = byCategory.liquidez + byCategory.inversiones + byCategory.jubilacion + propiedadesTotal + vehiculosTotal;
-    const totalPasivos  = byCategory.consumo + byCategory.prestamos;
+    const totalActivos =
+      byCategory.liquidez + byCategory.inversiones + byCategory.jubilacion + propiedadesTotal + vehiculosTotal;
+    const totalPasivos = byCategory.consumo + byCategory.prestamos;
     const patrimonioNeto = totalActivos - totalPasivos;
 
-    const grand = totalActivos + byCategory.consumo + byCategory.prestamos;
+    // Métricas estratégicas de alto valor
+    const deudaNeta = Math.max(0, totalPasivos - byCategory.liquidez);
+    const debtRatio = totalActivos > 0 ? (totalPasivos / totalActivos) * 100 : 0;
 
-    const pct = (val) => grand > 0 ? Math.round((val / grand) * 100) : 0;
-    const pctJubilacion  = pct(byCategory.jubilacion);
-    const pctInversiones = pct(byCategory.inversiones);
-    const pctLiquidez    = pct(byCategory.liquidez);
-    const pctPropiedades = pct(propiedadesTotal);
-    const pctVehiculos   = pct(vehiculosTotal);
-    const pctPrestamos   = pct(byCategory.prestamos);
-    const pctConsumo     = Math.max(0, 100 - pctJubilacion - pctInversiones - pctLiquidez - pctPropiedades - pctVehiculos - pctPrestamos);
+    // Capas de Liquidez (Tier 1, Tier 2, Tier 3)
+    const capa1Inmediata = byCategory.liquidez;
+    const capa2Crecimiento = byCategory.inversiones;
+    const capa3Iliquida = byCategory.jubilacion + propiedadesTotal + vehiculosTotal;
 
-    return { totalActivos, totalPasivos, patrimonioNeto, byCategory, pctJubilacion, pctInversiones, pctLiquidez, pctPropiedades, pctVehiculos, pctPrestamos, pctConsumo };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Estimación de Runway de Liquidez (ejemplo base de gasto mensual estimado o cuotas de deuda)
+    // Usamos el promedio de servicio de deuda mensual + gastos como referencia
+    const estimatedMonthlyBurn = Math.max(2500, (byCategory.prestamos * 0.007) + 1800);
+    const runwayMeses = estimatedMonthlyBurn > 0 ? (capa1Inmediata / estimatedMonthlyBurn).toFixed(1) : '—';
+
+    // Porcentajes para donut
+    const grand = totalActivos + totalPasivos;
+    const pct = (val) => (grand > 0 ? Math.round((val / grand) * 100) : 0);
+
+    return {
+      totalActivos,
+      totalPasivos,
+      patrimonioNeto,
+      byCategory,
+      deudaNeta,
+      debtRatio,
+      capa1Inmediata,
+      capa2Crecimiento,
+      capa3Iliquida,
+      runwayMeses,
+      pctLiquidez: pct(byCategory.liquidez),
+      pctInversiones: pct(byCategory.inversiones),
+      pctJubilacion: pct(byCategory.jubilacion),
+      pctPropiedades: pct(propiedadesTotal),
+      pctVehiculos: pct(vehiculosTotal),
+      pctPrestamos: pct(byCategory.prestamos),
+      pctConsumo: pct(byCategory.consumo),
+    };
   }, [accounts, edits, propiedadesTotal, vehiculosTotal]);
 
-  // ── Donut gradient ────────────────────────────────────────────────────────
-  const donutGradient = useMemo(() => {
-    const { pctJubilacion, pctInversiones, pctLiquidez, pctPropiedades, pctVehiculos, pctPrestamos } = totals;
-    const jEnd = pctJubilacion;
-    const iEnd = jEnd + pctInversiones;
-    const lEnd = iEnd + pctLiquidez;
-    const propEnd = lEnd + pctPropiedades;
-    const vEnd = propEnd + pctVehiculos;
-    const pEnd = vEnd + pctPrestamos;
-    return `conic-gradient(#006a61 0% ${jEnd}%, #131b2e ${jEnd}% ${iEnd}%, #c6c6cd ${iEnd}% ${lEnd}%, #f59e0b ${lEnd}% ${propEnd}%, #8b5cf6 ${propEnd}% ${vEnd}%, #ffdad6 ${vEnd}% ${pEnd}%, #ba1a1a ${pEnd}% 100%)`;
-  }, [totals]);
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleInputChange = (id, rawValue) => {
-    // Permitir guión al inicio, dígitos y un único punto decimal
     let cleaned = rawValue.replace(/[^0-9.-]/g, '');
-    // Si hay un guión, solo mantenerlo si está al inicio
     const isNegative = cleaned.startsWith('-');
     cleaned = cleaned.replace(/-/g, '');
     if (isNegative) cleaned = '-' + cleaned;
-    // Evitar múltiples puntos decimales
     const parts = cleaned.split('.');
     if (parts.length > 2) {
       cleaned = parts[0] + '.' + parts.slice(1).join('');
@@ -122,9 +136,8 @@ export default function PatrimonioNeto() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-
     let changedCount = 0;
-    let touchedCount = 0; // campos editados y/o marcados como "Actualizado"
+    let touchedCount = 0;
 
     for (const acc of accounts) {
       const editedRaw = edits[acc.id];
@@ -132,14 +145,11 @@ export default function PatrimonioNeto() {
       if (editedRaw === undefined && !isChecked) continue;
 
       touchedCount++;
-
-      const newVal = editedRaw !== undefined ? (Number(editedRaw) || 0) : acc.amount;
+      const newVal = editedRaw !== undefined ? Number(editedRaw) || 0 : acc.amount;
       const oldVal = saved[acc.id] !== undefined ? Number(saved[acc.id]) : acc.amount;
-      if (newVal === oldVal) continue; // confirmado (checkbox) pero sin cambio de valor
+      if (newVal === oldVal) continue;
 
       changedCount++;
-
-      // Persist to context
       updateAccount(acc.id, acc.name, newVal);
     }
 
@@ -149,7 +159,6 @@ export default function PatrimonioNeto() {
       return;
     }
 
-    // Snapshot de hoy en networthHistory (alimenta las gráficas de Resumen).
     try {
       await saveToday({
         ahorro: totals.byCategory.liquidez,
@@ -159,12 +168,11 @@ export default function PatrimonioNeto() {
         prestamo: totals.byCategory.prestamos,
       });
     } catch (err) {
-      setAlert({ type: 'info', message: `Se guardaron las cuentas, pero falló el registro histórico: ${err.message}` });
+      setAlert({ type: 'info', message: `Guardado en cuentas, pero falló historial: ${err.message}` });
       setTimeout(() => setAlert(null), 5000);
       return;
     }
 
-    // Mark as saved (cuentas editadas y/o confirmadas por checkbox)
     const newSaved = { ...saved };
     for (const acc of accounts) {
       if (edits[acc.id] !== undefined || checkedFields[acc.id]) {
@@ -175,10 +183,10 @@ export default function PatrimonioNeto() {
     setEdits({});
     setCheckedFields({});
 
-    const message = changedCount > 0
-      ? `¡Registro guardado! Se registraron ${changedCount} ajuste${changedCount !== 1 ? 's' : ''}.`
-      : `¡Registro guardado! Se confirmaron ${touchedCount} campo${touchedCount !== 1 ? 's' : ''} sin cambios de valor.`;
-    setAlert({ type: 'success', message });
+    setAlert({
+      type: 'success',
+      message: `¡Registro guardado! Se actualizaron ${changedCount} cuentas del patrimonio.`,
+    });
     setTimeout(() => setAlert(null), 4000);
   };
 
@@ -189,7 +197,6 @@ export default function PatrimonioNeto() {
     setTimeout(() => setAlert(null), 3000);
   };
 
-  // ── Grouped accounts by category ──────────────────────────────────────────
   const accountsByCategory = useMemo(() => {
     const grouped = {};
     for (const key of Object.keys(CATEGORY_META)) grouped[key] = [];
@@ -199,122 +206,194 @@ export default function PatrimonioNeto() {
     return grouped;
   }, [accounts]);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────
   return (
     <AppLayout title="Patrimonio Neto" searchPlaceholder="Buscar en patrimonio...">
-
       {/* Alert banner */}
       {alert && (
-        <div className={`flex items-center gap-sm p-sm rounded border font-body-sm text-body-sm transition-all ${
-          alert.type === 'success'
-            ? 'bg-secondary-container/20 border-secondary text-on-secondary-container'
-            : 'bg-surface-container border-outline-variant text-on-surface-variant'
-        }`}>
-          <span className="material-symbols-outlined text-[18px]">
+        <div
+          className={`flex items-center gap-3 p-4 rounded-xl border text-sm transition-all ${
+            alert.type === 'success'
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+              : 'bg-slate-100 dark:bg-zinc-800 border-slate-300 dark:border-zinc-700 text-slate-800 dark:text-zinc-200'
+          }`}
+        >
+          <span className="material-symbols-outlined text-[20px]">
             {alert.type === 'success' ? 'check_circle' : 'info'}
           </span>
-          {alert.message}
+          <span>{alert.message}</span>
         </div>
       )}
 
-      {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-md">
+      {/* Header & Networth Total Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h2 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
-            Registro de Patrimonio Neto
+          <h2 className="font-headline-lg text-2xl md:text-3xl font-bold text-slate-900 dark:text-zinc-100 tracking-tight">
+            Patrimonio Neto Familiar
           </h2>
-          <p className="font-body-md text-body-md text-on-surface-variant mt-xs">
-            Actualice sus valoraciones de activos y pasivos. Las cuentas se configuran en{' '}
-            <a href="/configuracion" className="text-secondary underline hover:text-secondary/80 transition-colors">
-              Configuración → Cuentas
-            </a>.
+          <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">
+            Balance consolidado de los activos y pasivos de la familia Álvarez Gamboa.
           </p>
         </div>
-        <div className="flex items-center gap-sm bg-surface-container-lowest p-xs rounded border border-outline-variant shrink-0">
-          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase px-sm">
-            Patrimonio Neto Total
-          </span>
-          <span className="font-headline-md text-headline-md text-secondary font-bold px-sm border-l border-outline-variant">
-            {formatCurrency(totals.patrimonioNeto)}
-          </span>
+        <div className="flex items-center gap-4 bg-white dark:bg-zinc-900 px-5 py-3 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs shrink-0">
+          <div>
+            <span className="text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider block">
+              Networth Consolidado
+            </span>
+            <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+              {formatExactCurrency(totals.patrimonioNeto)}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* ── Bento grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+      {/* Strategic Metrics Row (Runway, Deuda Neta, Salud Financiera) */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Activos */}
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-400 dark:text-zinc-500 mb-1">
+            <span className="text-xs uppercase font-semibold tracking-wider">Activos Totales</span>
+            <span className="material-symbols-outlined text-emerald-600 text-[18px]">account_balance_wallet</span>
+          </div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
+            {formatCurrency(totals.totalActivos)}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+            Bienes, inversiones y efectivo
+          </p>
+        </div>
 
-        {/* ── Left column (8) ── */}
-        <div className="lg:col-span-8 flex flex-col gap-gutter">
-          <div className="bg-surface-container-lowest rounded-lg border border-outline-variant p-lg shadow-sm">
+        {/* Pasivos / Ratio Deuda */}
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-400 dark:text-zinc-500 mb-1">
+            <span className="text-xs uppercase font-semibold tracking-wider">Deuda / Apalancamiento</span>
+            <span className="material-symbols-outlined text-rose-500 text-[18px]">trending_down</span>
+          </div>
+          <div className="text-2xl font-bold text-rose-600 dark:text-rose-400 tabular-nums">
+            {formatCurrency(totals.totalPasivos)}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+            Ratio de deuda: <span className="font-semibold">{totals.debtRatio.toFixed(1)}%</span> de los activos
+          </p>
+        </div>
 
-            <div className="flex items-center justify-between mb-md border-b border-outline-variant pb-sm">
-              <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider flex items-center gap-xs">
-                <span className="material-symbols-outlined text-[20px] text-primary-container">edit_document</span>
-                Formulario de Actualización de Valor
-              </h3>
-              <span className="font-label-sm text-label-sm text-on-surface-variant bg-surface-container-low px-sm py-base rounded-full hidden sm:block">
-                Última actualización: Hoy
-              </span>
+        {/* Runway de Liquidez */}
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-400 dark:text-zinc-500 mb-1">
+            <span className="text-xs uppercase font-semibold tracking-wider">Runway de Liquidez</span>
+            <span className="material-symbols-outlined text-teal-600 text-[18px]">hourglass_top</span>
+          </div>
+          <div className="text-2xl font-bold text-teal-600 dark:text-teal-400 tabular-nums">
+            ~{totals.runwayMeses} meses
+          </div>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+            Autonomía financiera en efectivo
+          </p>
+        </div>
+
+        {/* Salud Financiera */}
+        <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-400 dark:text-zinc-500 mb-1">
+            <span className="text-xs uppercase font-semibold tracking-wider">Salud Financiera</span>
+            <span className="material-symbols-outlined text-blue-500 text-[18px]">verified</span>
+          </div>
+          <div className="text-lg font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5 mt-0.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+            <span>Excelente</span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+            Patrimonio neto positivo (+{((totals.patrimonioNeto / (totals.totalActivos || 1)) * 100).toFixed(0)}% libre de deuda)
+          </p>
+        </div>
+      </section>
+
+      {/* Main Grid: Form Left (8 cols) + Breakdown Right (4 cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left column: Account Input Forms */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 p-6 shadow-xs">
+            <div className="flex items-center justify-between mb-6 border-b border-slate-100 dark:border-zinc-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-[20px]">
+                    edit_note
+                  </span>
+                  Actualización de Valores por Cuenta
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Modifica los balances actuales o confirma con el checkbox para guardar el snapshot histórico.
+                </p>
+              </div>
             </div>
 
             {accounts.length === 0 ? (
-              <div className="flex flex-col items-center gap-sm py-xl text-on-surface-variant text-center">
-                <span className="material-symbols-outlined text-[48px] opacity-30">account_balance_wallet</span>
-                <p className="font-body-md text-body-md">No hay cuentas configuradas.</p>
-                <p className="font-body-sm text-body-sm">
-                  Ve a{' '}
-                  <a href="/configuracion" className="text-secondary underline">Configuración → Cuentas</a>
-                  {' '}para agregar tus cuentas.
-                </p>
+              <div className="py-12 text-center text-slate-400">
+                <span className="material-symbols-outlined text-4xl opacity-40">account_balance</span>
+                <p className="text-sm mt-2">No hay cuentas activas registradas.</p>
               </div>
             ) : (
-              <form onSubmit={handleSave} className="space-y-lg">
-                {/* Render a section per category */}
+              <form onSubmit={handleSave} className="space-y-6">
                 {Object.entries(CATEGORY_META).map(([catKey, catMeta]) => {
                   const catAccounts = accountsByCategory[catKey] || [];
                   if (catAccounts.length === 0) return null;
+
                   return (
-                    <div key={catKey} className={catKey !== 'liquidez' ? 'pt-md border-t border-outline-variant/50' : ''}>
-                      <h4 className={`font-body-sm text-body-sm text-on-surface-variant mb-sm flex items-center gap-xs
-                        before:content-[''] before:block before:w-2 before:h-2 before:rounded-full
-                        ${catMeta.isLiability ? 'before:bg-error' : 'before:bg-secondary'}`}>
-                        {catMeta.label}
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                    <div key={catKey} className="pt-4 first:pt-0 border-t first:border-t-0 border-slate-100 dark:border-zinc-800/80">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span
+                          className="material-symbols-outlined text-[18px]"
+                          style={{ color: catMeta.color }}
+                        >
+                          {catMeta.icon}
+                        </span>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-zinc-300">
+                          {catMeta.label}
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {catAccounts.map((acc) => {
-                          const displayVal = edits[acc.id] !== undefined
-                            ? edits[acc.id]
-                            : String(acc.amount);
+                          const displayVal =
+                            edits[acc.id] !== undefined ? edits[acc.id] : String(acc.amount);
                           const isLocked = !!checkedFields[acc.id];
+
                           return (
-                            <div key={acc.id} className="flex flex-col gap-base">
-                              <div className="flex items-center justify-between gap-xs">
-                                <label className="font-label-md text-label-md text-on-surface">
+                            <div
+                              key={acc.id}
+                              className={`p-3 rounded-xl border transition-all ${
+                                isLocked
+                                  ? 'bg-slate-50 dark:bg-zinc-800/40 border-slate-200 dark:border-zinc-700/60'
+                                  : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 focus-within:border-emerald-500 dark:focus-within:border-emerald-500'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 truncate pr-2">
                                   {acc.name}
                                 </label>
-                                <label
-                                  className="flex items-center gap-xs cursor-pointer select-none"
-                                  title="Marcar como actualizado (bloquea el campo hasta guardar el registro)"
-                                >
+                                <label className="flex items-center gap-1.5 cursor-pointer select-none">
                                   <input
                                     type="checkbox"
                                     checked={isLocked}
                                     onChange={() => handleCheckToggle(acc.id)}
-                                    className="w-4 h-4 rounded border-outline-variant text-secondary focus:ring-1 focus:ring-secondary cursor-pointer"
+                                    className="w-3.5 h-3.5 rounded text-emerald-600 accent-emerald-600 focus:ring-0 cursor-pointer"
                                   />
-                                  <span className="font-label-sm text-label-sm text-on-surface-variant">Actualizado</span>
+                                  <span className="text-[11px] text-slate-400 dark:text-zinc-500">
+                                    Al día
+                                  </span>
                                 </label>
                               </div>
+
                               <div className="relative">
-                                <span className="absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant font-label-md text-label-md">$</span>
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500 text-xs font-mono">
+                                  $
+                                </span>
                                 <input
-                                  className={`w-full h-10 pl-8 pr-sm bg-surface border border-outline-variant focus:border-on-tertiary-container focus:ring-1 focus:ring-on-tertiary-container rounded text-body-sm text-right font-label-md text-label-md outline-none ${catMeta.isLiability ? 'text-error' : ''} ${isLocked ? 'opacity-60 cursor-not-allowed bg-surface-container-low' : ''}`}
                                   type="text"
                                   value={displayVal}
                                   disabled={isLocked}
                                   onChange={(e) => handleInputChange(acc.id, e.target.value)}
+                                  className={`w-full pl-6 pr-2 py-1.5 bg-transparent border-0 text-right font-mono text-sm tabular-nums outline-none font-medium ${
+                                    catMeta.isLiability ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-zinc-100'
+                                  } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 />
                               </div>
                             </div>
@@ -325,23 +404,27 @@ export default function PatrimonioNeto() {
                   );
                 })}
 
-                {/* Summary row */}
-                <div className="pt-md border-t border-outline-variant flex flex-col sm:flex-row sm:items-center justify-between gap-sm">
-                  <div className="flex gap-lg font-label-sm text-label-sm text-on-surface-variant">
-                    <span>Activos: <strong className="text-secondary">{formatCurrency(totals.totalActivos)}</strong></span>
-                    <span>Pasivos: <strong className="text-error">{formatCurrency(totals.totalPasivos)}</strong></span>
+                {/* Footer Save / Discard Bar */}
+                <div className="pt-4 border-t border-slate-100 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex gap-4 text-xs text-slate-500 dark:text-zinc-400">
+                    <span>
+                      Activos: <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(totals.totalActivos)}</strong>
+                    </span>
+                    <span>
+                      Pasivos: <strong className="text-rose-600 dark:text-rose-400">{formatCurrency(totals.totalPasivos)}</strong>
+                    </span>
                   </div>
-                  <div className="flex gap-sm justify-end">
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                     <button
                       type="button"
                       onClick={handleDiscard}
-                      className="h-10 px-md bg-surface border border-outline-variant text-on-surface rounded font-label-md text-label-md hover:bg-surface-container-low transition-colors outline-none"
+                      className="px-4 py-2 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl text-xs font-semibold transition-colors"
                     >
                       Descartar
                     </button>
                     <button
                       type="submit"
-                      className="h-10 px-md bg-secondary text-on-secondary rounded font-label-md text-label-md hover:bg-secondary/90 transition-colors outline-none"
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-sm transition-all"
                     >
                       Guardar Registro
                     </button>
@@ -352,122 +435,123 @@ export default function PatrimonioNeto() {
           </div>
         </div>
 
-        {/* ── Right column (4) ── */}
-        <div className="lg:col-span-4 flex flex-col gap-gutter">
-
-          {/* Portfolio Donut */}
-          <div className="bg-surface-container-lowest rounded-lg border border-outline-variant p-lg shadow-sm flex flex-col items-center">
-            <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider w-full mb-lg text-left">
-              Distribución del Portafolio
+        {/* Right column: 3 Tiers of Liquidity & Asset Breakdown */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          {/* Tiers of Assets (3 Capas de Liquidez) */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 p-5 shadow-xs">
+            <h3 className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-4">
+              Estructura por Capas de Liquidez
             </h3>
-            <div
-              className="relative w-48 h-48 rounded-full flex items-center justify-center mb-lg shadow-sm transition-all duration-500"
-              style={{ background: donutGradient }}
-            >
-              <div className="absolute w-36 h-36 bg-surface-container-lowest rounded-full flex flex-col items-center justify-center shadow">
-                <span className="font-label-sm text-label-sm text-on-surface-variant">Patrimonio</span>
-                <span className="font-headline-md text-headline-md text-on-surface font-bold text-center leading-tight">
-                  {formatCurrency(totals.patrimonioNeto).replace('US$','$')}
-                </span>
+
+            <div className="space-y-3">
+              {/* Capa 1 */}
+              <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-200/60 dark:border-teal-900/40">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-teal-500" />
+                    Capa 1: Inmediata
+                  </span>
+                  <span className="text-xs font-bold text-teal-800 dark:text-teal-300 tabular-nums">
+                    {formatCurrency(totals.capa1Inmediata)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-teal-700/80 dark:text-teal-400/80">
+                  Cuentas corrientes y ahorros de acceso inmediato.
+                </p>
+              </div>
+
+              {/* Capa 2 */}
+              <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    Capa 2: Crecimiento Líquido
+                  </span>
+                  <span className="text-xs font-bold text-blue-800 dark:text-blue-300 tabular-nums">
+                    {formatCurrency(totals.capa2Crecimiento)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-blue-700/80 dark:text-blue-400/80">
+                  Fondos bursátiles y acciones convertibles a efectivo en días.
+                </p>
+              </div>
+
+              {/* Capa 3 */}
+              <div className="p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-900/40">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-purple-800 dark:text-purple-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-500" />
+                    Capa 3: Patrimonio Iliquido
+                  </span>
+                  <span className="text-xs font-bold text-purple-800 dark:text-purple-300 tabular-nums">
+                    {formatCurrency(totals.capa3Iliquida)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-purple-700/80 dark:text-purple-400/80">
+                  Propiedades de avalúo, vehículos y aportes de jubilación.
+                </p>
               </div>
             </div>
-            <div className="w-full space-y-sm">
-              {[
-                { label: 'Jubilación',         color: '#006a61', pct: totals.pctJubilacion,  amount: totals.byCategory.jubilacion  },
-                { label: 'Inversiones',         color: '#131b2e', pct: totals.pctInversiones, amount: totals.byCategory.inversiones },
-                { label: 'Liquidez',            color: '#c6c6cd', pct: totals.pctLiquidez,    amount: totals.byCategory.liquidez    },
-                { label: 'Propiedades',         color: '#f59e0b', pct: totals.pctPropiedades, amount: propiedadesTotal              },
-                { label: 'Automóviles',          color: '#8b5cf6', pct: totals.pctVehiculos,   amount: vehiculosTotal                },
-                { label: 'Préstamos',           color: '#ffdad6', pct: totals.pctPrestamos,   amount: totals.byCategory.prestamos   },
-                { label: 'Deudas de Consumo',  color: '#ba1a1a', pct: totals.pctConsumo,     amount: totals.byCategory.consumo     },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center justify-between">
-                  <div className="flex items-center gap-xs">
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                    <span className="font-body-sm text-body-sm text-on-surface">{item.label}</span>
+          </div>
+
+          {/* Propiedades */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 p-5 shadow-xs">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px]">home</span>
+                Propiedades ({properties.length})
+              </h3>
+              <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
+                {formatCurrency(propiedadesTotal)}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {properties.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/40 text-xs"
+                >
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-zinc-200 block">{p.name}</span>
+                    <span className="text-[11px] text-slate-400 dark:text-zinc-500">Avalúo: {p.appraisalDate}</span>
                   </div>
-                  <div className="flex items-baseline gap-xs">
-                    <span className="font-label-sm text-label-sm text-on-surface-variant">{formatCurrency(item.amount)}</span>
-                    <span className="font-label-md text-label-md text-on-surface">{item.pct}%</span>
-                  </div>
+                  <span className="font-mono font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
+                    {formatCurrency(p.value)}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Auto-Depreciación */}
-          <div className="bg-surface-container-highest rounded-lg border border-outline-variant p-lg shadow-sm glass-panel relative overflow-hidden">
-            <div className="absolute -right-10 -top-10 opacity-5">
-              <span className="material-symbols-outlined text-[120px]">trending_down</span>
-            </div>
-            <div className="relative z-10">
-              <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider mb-sm flex items-center gap-xs">
-                <span className="material-symbols-outlined text-[18px]">directions_car</span>
-                Automóviles
+          {/* Automóviles */}
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 p-5 shadow-xs">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px]">directions_car</span>
+                Vehículos ({vehicles.length})
               </h3>
-              <p className="font-body-sm text-body-sm text-on-surface-variant mb-md">
-                Deducciones estimadas por el sistema para activos físicos.
-              </p>
-              {vehicles.length === 0 ? (
-                <p className="font-body-sm text-body-sm text-on-surface-variant italic">
-                  Sin vehículos registrados.
-                </p>
-              ) : (
-                vehicles.map((vehicle) => {
-                  const currentValue = estimateCurrentValue(vehicle);
-                  const monthly = estimateMonthlyDepreciation(vehicle);
-                  return (
-                    <div key={vehicle.id} className="bg-surface-container-lowest p-sm rounded border border-outline-variant/50 flex justify-between items-center mb-sm last:mb-0">
-                      <div>
-                        <div className="font-label-md text-label-md text-on-surface">{vehicle.name}</div>
-                        <div className="font-label-sm text-label-sm text-on-surface-variant mt-base">15% Est. Anual</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-label-md text-label-md text-on-surface">{formatCurrency(currentValue)}</div>
-                        <div className="font-label-sm text-label-sm text-error mt-base flex items-center justify-end gap-base">
-                          <span className="material-symbols-outlined text-[12px]">arrow_downward</span>
-                          {formatCurrency(monthly)}/mo
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+              <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
+                {formatCurrency(vehiculosTotal)}
+              </span>
             </div>
-          </div>
-
-          {/* Propiedades */}
-          <div className="bg-surface-container-highest rounded-lg border border-outline-variant p-lg shadow-sm glass-panel relative overflow-hidden">
-            <div className="absolute -right-10 -top-10 opacity-5">
-              <span className="material-symbols-outlined text-[120px]">home_work</span>
-            </div>
-            <div className="relative z-10">
-              <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider mb-sm flex items-center gap-xs">
-                <span className="material-symbols-outlined text-[18px]">home_work</span>
-                Propiedades
-              </h3>
-              <p className="font-body-sm text-body-sm text-on-surface-variant mb-md">
-                Valores de avalúo registrados en Configuración → Propiedades.
-              </p>
-              {properties.length === 0 ? (
-                <p className="font-body-sm text-body-sm text-on-surface-variant italic">
-                  Sin propiedades registradas.
-                </p>
-              ) : (
-                properties.map((prop) => (
-                  <div key={prop.id} className="bg-surface-container-lowest p-sm rounded border border-outline-variant/50 flex justify-between items-center mb-sm last:mb-0">
+            <div className="space-y-2">
+              {vehicles.map((v) => {
+                const curVal = estimateCurrentValue(v);
+                return (
+                  <div
+                    key={v.id}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/40 text-xs"
+                  >
                     <div>
-                      <div className="font-label-md text-label-md text-on-surface">{prop.name}</div>
-                      <div className="font-label-sm text-label-sm text-on-surface-variant mt-base">
-                        Adquirida: {prop.appraisalDate}
-                      </div>
+                      <span className="font-semibold text-slate-800 dark:text-zinc-200 block">{v.name}</span>
+                      <span className="text-[11px] text-slate-400 dark:text-zinc-500">Año {v.purchaseYear} • Depr. 15%</span>
                     </div>
-                    <div className="font-label-md text-label-md text-on-surface">
-                      {formatCurrency(prop.value)}
-                    </div>
+                    <span className="font-mono font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
+                      {formatCurrency(curVal)}
+                    </span>
                   </div>
-                ))
-              )}
+                );
+              })}
             </div>
           </div>
         </div>

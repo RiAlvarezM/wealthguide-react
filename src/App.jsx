@@ -15,18 +15,22 @@ import Presupuesto from './pages/Presupuesto';
 import Simuladores from './pages/Simuladores';
 import Jubilacion from './pages/Jubilacion';
 import Prestamos from './pages/Prestamos';
+import { AmortizacionProvider } from './context/AmortizacionContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Lealtad from './pages/Lealtad';
 import Configuracion from './pages/Configuracion';
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AccountsProvider>
-        <PropertiesProvider>
-          <VehiclesProvider>
-            <LoyaltyProvider>
-              <NetworthHistoryProvider>
-                <BrowserRouter>
+    <ThemeProvider>
+      <AuthProvider>
+        <AccountsProvider>
+          <PropertiesProvider>
+            <VehiclesProvider>
+              <LoyaltyProvider>
+                <NetworthHistoryProvider>
+                  <AmortizacionProvider>
+                  <BrowserRouter>
                   <Routes>
                     <Route path="/login" element={<Login />} />
 
@@ -57,6 +61,14 @@ export default function App() {
                     />
                     <Route
                       path="/presupuesto"
+                      element={
+                        <ProtectedRoute>
+                          <Presupuesto />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/gastos"
                       element={
                         <ProtectedRoute>
                           <Presupuesto />
@@ -108,11 +120,13 @@ export default function App() {
                     <Route path="*" element={<Navigate to="/efectivo" replace />} />
                   </Routes>
                 </BrowserRouter>
+              </AmortizacionProvider>
               </NetworthHistoryProvider>
             </LoyaltyProvider>
           </VehiclesProvider>
         </PropertiesProvider>
       </AccountsProvider>
     </AuthProvider>
+    </ThemeProvider>
   );
 }

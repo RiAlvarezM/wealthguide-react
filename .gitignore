@@ -3,6 +3,7 @@ dist
 .env
 .DS_Store
 *.local
+.firebase/
 
 
 local-data/

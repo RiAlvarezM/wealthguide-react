@@ -37,5 +37,6 @@ service cloud.firestore {
     match /loyaltyPrograms/{document=**}  { allow read, write: if isApproved(); }
     match /networthHistory/{document=**}  { allow read, write: if isApproved(); }
     match /transactions/{document=**}     { allow read, write: if isApproved(); }
+    match /loanDetails/{document=**}      { allow read, write: if isApproved(); }
   }
 }

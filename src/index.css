@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Monospace figures para que los números y monedas se alineen verticalmente */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;
@@ -22,9 +34,9 @@
 }
 
 .input-focus-ring:focus-within {
-  border-color: #3b82f6;
+  border-color: #10b981;
   outline: none;
-  box-shadow: 0 0 0 1px #3b82f6;
+  box-shadow: 0 0 0 1px #10b981;
 }
 
 .hide-scrollbar::-webkit-scrollbar {
@@ -40,4 +52,11 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.dark .glass-panel {
+  background: rgba(24, 24, 27, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
