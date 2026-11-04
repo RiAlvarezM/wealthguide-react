@@ -70,6 +70,17 @@ export default function Presupuesto() {
   });
 
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [quickAddType, setQuickAddType] = useState('expense');
+
+  const handleOpenAddExpense = () => {
+    setQuickAddType('expense');
+    setIsQuickAddOpen(true);
+  };
+
+  const handleOpenAddIncome = () => {
+    setQuickAddType('income');
+    setIsQuickAddOpen(true);
+  };
 
   const monthlySummaries = summaryData.monthlySummaries || [];
   const yearlySummaries = summaryData.yearlySummaries || [];
@@ -467,15 +478,26 @@ export default function Presupuesto() {
             </button>
           </div>
 
-          {/* Botón Principal para Agregar Gasto */}
-          <button
-            type="button"
-            onClick={() => setIsQuickAddOpen(true)}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
-          >
-            <span className="material-symbols-outlined text-base">add_circle</span>
-            <span className="whitespace-nowrap">+ Registrar Gasto</span>
-          </button>
+          {/* Botones de Registro Rápido: Gasto e Ingreso */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleOpenAddExpense}
+              className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm px-3 sm:px-3.5 py-2 rounded-xl shadow-sm active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined text-[18px]">remove_circle</span>
+              <span className="whitespace-nowrap">+ Gasto</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenAddIncome}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm px-3 sm:px-3.5 py-2 rounded-xl shadow-sm active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined text-[18px]">add_circle</span>
+              <span className="whitespace-nowrap">+ Ingreso</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -977,19 +999,30 @@ export default function Presupuesto() {
         </div>
       )}
 
-      {/* Floating Action Button (FAB) en Móvil */}
-      <button
-        type="button"
-        onClick={() => setIsQuickAddOpen(true)}
-        className="fixed bottom-6 right-6 z-40 sm:hidden w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-xl shadow-emerald-600/40 flex items-center justify-center active:scale-90 transition-transform"
-        aria-label="Registrar Gasto Rápido"
-      >
-        <span className="material-symbols-outlined text-2xl">add</span>
-      </button>
+      {/* Floating Action Buttons (FAB) en Móvil */}
+      <div className="fixed bottom-20 right-4 z-40 sm:hidden flex flex-col gap-2 items-end">
+        <button
+          type="button"
+          onClick={handleOpenAddIncome}
+          className="h-10 px-3.5 rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 text-xs font-bold active:scale-95 transition-transform"
+        >
+          <span className="material-symbols-outlined text-sm">add</span>
+          <span>+ Ingreso</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleOpenAddExpense}
+          className="h-11 px-4 rounded-full bg-rose-600 text-white shadow-xl shadow-rose-600/40 flex items-center gap-1.5 text-xs font-bold active:scale-95 transition-transform"
+        >
+          <span className="material-symbols-outlined text-sm">remove</span>
+          <span>+ Gasto</span>
+        </button>
+      </div>
 
       {/* Modal de Registro Rápido estilo HomeBudget */}
       <QuickExpenseModal
         isOpen={isQuickAddOpen}
+        initialType={quickAddType}
         onClose={() => setIsQuickAddOpen(false)}
         onSave={handleSaveTransaction}
         categories={summaryData.categories || []}

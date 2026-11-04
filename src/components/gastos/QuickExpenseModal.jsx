@@ -7,19 +7,31 @@ import { useState, useEffect } from 'react';
  *  - Display numérico grande con calculadora táctil integrada
  *  - Selector de Tipo: Gasto / Ingreso / Transferencia
  *  - Selector de Categorías y Subcategorías
- *  - Selector de Cuenta de origen
+ *  - Selector de Cuenta de origen o destino
  *  - Comercio / Beneficiario y Notas
  *  - Fecha (por defecto hoy)
  */
 
+const QUICK_INCOME_SOURCES = [
+  'Salario ACP',
+  'Salario Copa',
+  'Alquiler',
+  'Intereses',
+  'Reembolso',
+  'Dividendos',
+  'Consultoría',
+  'Otros'
+];
+
 export default function QuickExpenseModal({
   isOpen,
+  initialType = 'expense',
   onClose,
   onSave,
   categories = [],
   accounts = []
 }) {
-  const [type, setType] = useState('expense'); // 'expense' | 'income' | 'transfer'
+  const [type, setType] = useState(initialType); // 'expense' | 'income' | 'transfer'
   const [amountStr, setAmountStr] = useState('0');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState('');
@@ -28,6 +40,13 @@ export default function QuickExpenseModal({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [payee, setPayee] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Sync initialType when opened
+  useEffect(() => {
+    if (isOpen && initialType) {
+      setType(initialType);
+    }
+  }, [isOpen, initialType]);
 
   // Default first category and account
   useEffect(() => {
@@ -48,7 +67,6 @@ export default function QuickExpenseModal({
     }
   }, [accounts, selectedAccount, toAccount]);
 
-  // When category changes, update available subcategories
   const currentCategoryObj = categories.find(c => c.name === selectedCategory);
   const subcategories = currentCategoryObj?.subcategories || [];
 
@@ -83,16 +101,13 @@ export default function QuickExpenseModal({
       return;
     }
 
-    // Si es dígito
     if (amountStr === '0') {
       setAmountStr(key);
     } else {
-      // Limitar a 2 decimales si ya hay punto
       if (amountStr.includes('.')) {
         const parts = amountStr.split('.');
         if (parts[1].length >= 2) return;
       }
-      // Limitar longitud
       if (amountStr.length < 10) {
         setAmountStr(amountStr + key);
       }
@@ -121,7 +136,6 @@ export default function QuickExpenseModal({
     };
 
     onSave(transactionData);
-    // Reset modal
     setAmountStr('0');
     setNotes('');
     setPayee('');
@@ -184,7 +198,7 @@ export default function QuickExpenseModal({
         {/* Contenido con Scroll */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           
-          {/* Display Grande del Monto estilo HomeBudget */}
+          {/* Display Grande del Monto */}
           <div className="bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 text-center">
             <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
               Monto del {type === 'expense' ? 'Gasto' : type === 'income' ? 'Ingreso' : 'Traslado'}
@@ -201,7 +215,7 @@ export default function QuickExpenseModal({
             </div>
           </div>
 
-          {/* Teclado Numérico Táctil Rápido */}
+          {/* Teclado Numérico Táctil */}
           <div className="grid grid-cols-4 gap-2">
             {['7', '8', '9', '⌫', '4', '5', '6', 'C', '1', '2', '3', '.', '0', '00'].map((k) => (
               <button
@@ -250,7 +264,7 @@ export default function QuickExpenseModal({
                         onClick={() => handleCategorySelect(c.name)}
                         className={`px-3 py-1.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-all ${
                           selectedCategory === c.name
-                            ? 'bg-emerald-600 text-white shadow-xs scale-102'
+                            ? 'bg-rose-600 text-white shadow-xs scale-102'
                             : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200'
                         }`}
                       >
@@ -279,11 +293,36 @@ export default function QuickExpenseModal({
               </>
             )}
 
-            {/* Cuenta de Pago / Origen */}
+            {/* Si es Ingreso: Pills rápidos de Fuente de Ingreso */}
+            {type === 'income' && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1.5">
+                  Fuente de Ingreso Frecuente
+                </label>
+                <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+                  {QUICK_INCOME_SOURCES.map((src) => (
+                    <button
+                      key={src}
+                      type="button"
+                      onClick={() => setPayee(src)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-xl whitespace-nowrap transition-all ${
+                        payee === src
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-200'
+                      }`}
+                    >
+                      {src}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Cuenta de Pago / Destino */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1">
-                  {type === 'transfer' ? 'Desde Cuenta' : 'Cuenta / Tarjeta'}
+                  {type === 'transfer' ? 'Desde Cuenta' : type === 'income' ? '¿En qué cuenta entra el dinero?' : 'Cuenta / Tarjeta'}
                 </label>
                 <select
                   value={selectedAccount}
@@ -316,11 +355,11 @@ export default function QuickExpenseModal({
               {type !== 'transfer' && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1">
-                    {type === 'expense' ? 'Comercio / Beneficiario' : 'Fuente / Descripción'}
+                    {type === 'expense' ? 'Comercio / Beneficiario' : 'Descripción del Ingreso'}
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej. Riba Smith, Netflix, ACP..."
+                    placeholder={type === 'expense' ? 'Ej. Riba Smith, Netflix, Gasolinera...' : 'Ej. Salario quincena, Alquiler depto...'}
                     value={payee}
                     onChange={(e) => setPayee(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-zinc-100 outline-none"

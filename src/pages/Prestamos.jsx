@@ -27,6 +27,55 @@ function accountSlug(name = '') {
   return name.toLowerCase().replace(/\s+/g, '');
 }
 
+export const LOAN_DATES_CONFIG = {
+  '4islas': {
+    startDate: '2016-04-01',
+    startLabel: 'Abril 2016',
+    termYears: 30,
+    termMonths: 360,
+    endDate: '2046-04-01',
+    endLabel: 'Abril 2046',
+  },
+  'parkavenue': {
+    startDate: '2018-12-01',
+    startLabel: 'Diciembre 2018',
+    termYears: 30,
+    termMonths: 360,
+    endDate: '2048-12-01',
+    endLabel: 'Diciembre 2048',
+  }
+};
+
+function getLoanDateInfo(accountName = '') {
+  const slug = accountSlug(accountName);
+  const cfg = LOAN_DATES_CONFIG[slug] || {
+    startDate: '2016-04-01',
+    startLabel: 'Abril 2016',
+    termYears: 30,
+    termMonths: 360,
+    endDate: '2046-04-01',
+    endLabel: 'Abril 2046',
+  };
+
+  const start = new Date(cfg.startDate);
+  const now = new Date();
+
+  const elapsedMonths = Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()));
+  const remainingMonths = Math.max(0, cfg.termMonths - elapsedMonths);
+  const elapsedYears = (elapsedMonths / 12).toFixed(1);
+  const remainingYears = (remainingMonths / 12).toFixed(1);
+  const progressPct = Math.min(100, Math.round((elapsedMonths / cfg.termMonths) * 100));
+
+  return {
+    ...cfg,
+    elapsedMonths,
+    remainingMonths,
+    elapsedYears,
+    remainingYears,
+    progressPct
+  };
+}
+
 const TABS = [
   { id: 'resumen', label: 'Resumen y Métricas', icon: 'summarize' },
   { id: 'amortizacion', label: 'Tabla de Amortización', icon: 'table_chart' },
@@ -105,12 +154,12 @@ export default function Prestamos() {
         </div>
 
         <div className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
-          <p className="font-label-sm text-label-sm text-on-surface-variant uppercase mb-1">Cuotas Registradas</p>
+          <p className="font-label-sm text-label-sm text-on-surface-variant uppercase mb-1">Plazo de Hipotecas</p>
           <h3 className="font-headline-lg text-headline-lg font-bold text-secondary">
-            {schedule.length > 0 ? `${schedule.length} cuotas` : 'Sin calendario'}
+            30 Años (360 Cuotas)
           </h3>
           <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-            {schedule.length > 0 ? 'Abril 2016 – Marzo 2036 (4 Islas)' : 'Pendiente de importación'}
+            4 Islas (2016–2046) • Park Avenue (2018–2048)
           </p>
         </div>
       </section>
@@ -132,6 +181,7 @@ export default function Prestamos() {
             const shareOfTotal = totalDebt > 0 ? (acc.amount / totalDebt) * 100 : 0;
             const isSelected = selected?.id === acc.id;
             const hasAm = accountSlug(acc.name) === AMORTIZATION_LOAN_ID || schedule.length > 0;
+            const loanDates = getLoanDateInfo(acc.name);
 
             return (
               <button
@@ -187,6 +237,31 @@ export default function Prestamos() {
                       {linkedProperty && <span>LTV: {((acc.amount / linkedProperty.value) * 100).toFixed(0)}%</span>}
                     </div>
                   </div>
+
+                  {/* Fechas de Inicio, Fin y Plazo a 30 Años */}
+                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider">Plazo Original:</span>
+                      <span className="font-bold text-slate-800 dark:text-zinc-200">30 Años (360 Cuotas)</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1 text-slate-600 dark:text-zinc-400">
+                        <span className="material-symbols-outlined text-[15px] text-emerald-600 dark:text-emerald-400">calendar_month</span>
+                        <span>Inicio: <strong className="text-slate-900 dark:text-zinc-100 font-semibold">{loanDates.startLabel}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-1 text-slate-600 dark:text-zinc-400">
+                        <span className="material-symbols-outlined text-[15px] text-rose-500">flag</span>
+                        <span>Final: <strong className="text-slate-900 dark:text-zinc-100 font-semibold">{loanDates.endLabel}</strong></span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden mt-1">
+                      <div className="bg-emerald-500 h-full rounded-full transition-all" style={{ width: `${loanDates.progressPct}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-slate-500 dark:text-zinc-400">
+                      <span>{loanDates.elapsedYears} años pagados ({loanDates.progressPct}%)</span>
+                      <span>{loanDates.remainingYears} años restantes</span>
+                    </div>
+                  </div>
                 </div>
               </button>
             );
@@ -198,21 +273,40 @@ export default function Prestamos() {
       {selected && (
         <div className="bg-white border border-outline-variant rounded-xl overflow-hidden shadow-sm">
           {/* Panel header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-6 py-4 border-b border-outline-variant bg-surface-container-low/30">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-6 py-4 border-b border-outline-variant bg-surface-container-low/30 gap-3">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-headline-md text-headline-md font-bold text-on-surface">
                   Detalle: {selected.name}
                 </h3>
-                {hasAmortizacion && (
-                  <span className="font-label-sm text-label-sm bg-secondary/10 text-secondary px-2.5 py-0.5 rounded-full font-semibold border border-secondary/20">
-                    20 Años (240 Cuotas)
-                  </span>
-                )}
+                <span className="font-label-sm text-label-sm bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full font-bold border border-emerald-500/20">
+                  Plazo: 30 Años (360 Cuotas)
+                </span>
               </div>
-              <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                {CATEGORY_META[selected.category].label} • Saldo actual: {formatCurrency(selected.amount)}
-              </p>
+              {(() => {
+                const dates = getLoanDateInfo(selected.name);
+                return (
+                  <div className="flex items-center gap-2 sm:gap-4 text-xs text-on-surface-variant mt-1.5 flex-wrap">
+                    <span>{CATEGORY_META[selected.category].label}</span>
+                    <span>•</span>
+                    <span>Saldo actual: <strong className="text-on-surface">{formatCurrency(selected.amount)}</strong></span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[15px] text-emerald-600 dark:text-emerald-400">calendar_month</span>
+                      Fecha Inicial: <strong className="text-on-surface">{dates.startLabel}</strong>
+                    </span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[15px] text-rose-500">flag</span>
+                      Fecha Final: <strong className="text-on-surface">{dates.endLabel}</strong>
+                    </span>
+                    <span>•</span>
+                    <span className="text-slate-500 dark:text-zinc-400">
+                      ({dates.elapsedYears} años pagados • {dates.remainingMonths} cuotas pendientes)
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

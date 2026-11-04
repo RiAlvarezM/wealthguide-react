@@ -17,6 +17,7 @@ import Jubilacion from './pages/Jubilacion';
 import Prestamos from './pages/Prestamos';
 import { AmortizacionProvider } from './context/AmortizacionContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { WorkspaceProvider } from './context/WorkspaceContext';
 import Lealtad from './pages/Lealtad';
 import Configuracion from './pages/Configuracion';
 
@@ -31,7 +32,8 @@ export default function App() {
                 <NetworthHistoryProvider>
                   <AmortizacionProvider>
                   <BrowserRouter>
-                  <Routes>
+                    <WorkspaceProvider>
+                      <Routes>
                     <Route path="/login" element={<Login />} />
 
                     <Route
@@ -118,7 +120,8 @@ export default function App() {
 
                     <Route path="/" element={<Navigate to="/efectivo" replace />} />
                     <Route path="*" element={<Navigate to="/efectivo" replace />} />
-                  </Routes>
+                    </Routes>
+                  </WorkspaceProvider>
                 </BrowserRouter>
               </AmortizacionProvider>
               </NetworthHistoryProvider>
