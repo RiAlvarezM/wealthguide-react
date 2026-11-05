@@ -13,6 +13,8 @@ import LoanChart from '../components/prestamos/LoanChart';
 import AmortizacionTable from '../components/prestamos/AmortizacionTable';
 import PagosExtraTable from '../components/prestamos/PagosExtraTable';
 import ImportAmortizacionModal from '../components/prestamos/ImportAmortizacionModal';
+import PayoffAccelerationCard from '../components/prestamos/PayoffAccelerationCard';
+import { calculateLoanProjections, LOAN_DEFAULTS } from '../lib/loanProjections';
 
 function formatCurrency(value) {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -182,6 +184,11 @@ export default function Prestamos() {
             const isSelected = selected?.id === acc.id;
             const hasAm = accountSlug(acc.name) === AMORTIZATION_LOAN_ID || schedule.length > 0;
             const loanDates = getLoanDateInfo(acc.name);
+            const loanDefaults = LOAN_DEFAULTS[accountSlug(acc.name)] || LOAN_DEFAULTS['4islas'];
+            const loanProjections = calculateLoanProjections({
+              ...loanDefaults,
+              currentBalance: acc.amount
+            });
 
             return (
               <button
@@ -238,28 +245,36 @@ export default function Prestamos() {
                     </div>
                   </div>
 
-                  {/* Fechas de Inicio, Fin y Plazo a 30 Años */}
-                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800 text-xs space-y-1.5">
+                  {/* Fechas de Inicio, Fin y Plazo Acelerado */}
+                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800 text-xs space-y-2">
                     <div className="flex items-center justify-between text-slate-500 dark:text-zinc-400">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider">Plazo Original:</span>
-                      <span className="font-bold text-slate-800 dark:text-zinc-200">30 Años (360 Cuotas)</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-wider">Plazo Contractual:</span>
+                      <span className="font-bold text-slate-700 dark:text-zinc-300">30 Años (360 Meses)</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1 text-slate-600 dark:text-zinc-400">
-                        <span className="material-symbols-outlined text-[15px] text-emerald-600 dark:text-emerald-400">calendar_month</span>
-                        <span>Inicio: <strong className="text-slate-900 dark:text-zinc-100 font-semibold">{loanDates.startLabel}</strong></span>
+
+                    {/* Badge de Plazo Acelerado por Abonos */}
+                    <div className="bg-emerald-50/80 dark:bg-emerald-950/40 p-2.5 rounded-xl border border-emerald-500/20 flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300 tracking-wider">
+                          Plazo Actual Estimado
+                        </div>
+                        <div className="text-base font-black text-emerald-700 dark:text-emerald-400">
+                          ~{loanProjections.base.effectiveTermYears} Años
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 text-slate-600 dark:text-zinc-400">
-                        <span className="material-symbols-outlined text-[15px] text-rose-500">flag</span>
-                        <span>Final: <strong className="text-slate-900 dark:text-zinc-100 font-semibold">{loanDates.endLabel}</strong></span>
+                      <div className="text-right">
+                        <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200">
+                          -{loanProjections.base.yearsSaved} Años ganados
+                        </span>
+                        <div className="text-[10px] font-medium text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">
+                          Fin: {loanProjections.base.projectedEndDate}
+                        </div>
                       </div>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden mt-1">
-                      <div className="bg-emerald-500 h-full rounded-full transition-all" style={{ width: `${loanDates.progressPct}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[11px] text-slate-500 dark:text-zinc-400">
-                      <span>{loanDates.elapsedYears} años pagados ({loanDates.progressPct}%)</span>
-                      <span>{loanDates.remainingYears} años restantes</span>
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400 pt-0.5">
+                      <span>Inicio: <strong className="text-slate-800 dark:text-zinc-200">{loanProjections.startLabel}</strong></span>
+                      <span>Vence orig.: <strong className="text-slate-800 dark:text-zinc-200">{loanProjections.originalEndDate}</strong></span>
                     </div>
                   </div>
                 </div>
@@ -335,8 +350,14 @@ export default function Prestamos() {
             {/* ── TAB: RESUMEN ────────────────────────────────────────────── */}
             {(!hasAmortizacion || activeTab === 'resumen') && (
               <div className="flex flex-col gap-6">
-                {/* KPIs dinámicos calculados a partir de las 240 cuotas */}
+                {/* KPIs dinámicos calculados a partir de las cuotas */}
                 {hasAmortizacion && <LoanKPIs />}
+
+                {/* Tarjeta de Aceleración de Plazo y Simulador de Abonos Extra */}
+                <PayoffAccelerationCard
+                  loan={selected}
+                  totalExtraPaid={schedule.reduce((s, r) => s + (r.extra || 0), 0)}
+                />
 
                 {/* Gráfica interactiva de amortización */}
                 {hasAmortizacion && <LoanChart />}
