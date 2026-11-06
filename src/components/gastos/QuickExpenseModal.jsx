@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { groupAccountsByPool, isInvestmentAccount, classifyTransfer } from '../../lib/accountClassification';
 
 /**
  * QuickExpenseModal.jsx
  * Modal / Bottom-Sheet de Registro Rápido estilo HomeBudget.
- * Incluye:
- *  - Display numérico grande con calculadora táctil integrada
- *  - Selector de Tipo: Gasto / Ingreso / Transferencia
- *  - Selector de Categorías y Subcategorías
- *  - Selector de Cuenta de origen o destino
- *  - Comercio / Beneficiario y Notas
- *  - Fecha (por defecto hoy)
+ * Soporta el Modelo de 2 Bolsas:
+ *  - Gasto: Costo de vida real
+ *  - Ingreso: Dinero entrante a la bolsa de liquidez
+ *  - Transferencia:
+ *     * Aporte a Inversión (Mi Ahorro Real: Liquidez -> Inversión)
+ *     * Traspaso Interno / Pago de Tarjeta (Liquidez -> Liquidez)
+ *     * Retiro de Inversión (Inversión -> Liquidez)
  */
 
 const QUICK_INCOME_SOURCES = [
@@ -32,6 +33,7 @@ export default function QuickExpenseModal({
   accounts = []
 }) {
   const [type, setType] = useState(initialType); // 'expense' | 'income' | 'transfer'
+  const [transferPurpose, setTransferPurpose] = useState('aporte_inversion'); // 'aporte_inversion' | 'traspaso_liquidez' | 'retiro_inversion'
   const [amountStr, setAmountStr] = useState('0');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState('');
@@ -40,6 +42,11 @@ export default function QuickExpenseModal({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [payee, setPayee] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Agrupación de cuentas en las 2 bolsas
+  const groupedAccounts = useMemo(() => {
+    return groupAccountsByPool(accounts);
+  }, [accounts]);
 
   // Sync initialType when opened
   useEffect(() => {
@@ -58,14 +65,46 @@ export default function QuickExpenseModal({
     }
   }, [categories, selectedCategory]);
 
+  // Configuración de cuentas según propósito de transferencia
   useEffect(() => {
-    if (accounts.length > 0 && !selectedAccount) {
-      setSelectedAccount(accounts[0]);
+    if (!accounts || accounts.length === 0) return;
+
+    const liqAccs = groupedAccounts.liquidity;
+    const invAccs = groupedAccounts.investment;
+
+    if (type === 'transfer') {
+      if (transferPurpose === 'aporte_inversion') {
+        // Desde Liquidez hacia Inversión
+        if (!selectedAccount || isInvestmentAccount(selectedAccount)) {
+          setSelectedAccount(liqAccs[0] || accounts[0]);
+        }
+        if (!toAccount || !isInvestmentAccount(toAccount)) {
+          setToAccount(invAccs[0] || 'Schwab');
+        }
+      } else if (transferPurpose === 'traspaso_liquidez') {
+        // Entre cuentas de liquidez
+        if (!selectedAccount || isInvestmentAccount(selectedAccount)) {
+          setSelectedAccount(liqAccs[0] || accounts[0]);
+        }
+        if (!toAccount || isInvestmentAccount(toAccount) || toAccount === selectedAccount) {
+          const secondLiq = liqAccs.find(a => a !== selectedAccount) || liqAccs[1] || liqAccs[0];
+          setToAccount(secondLiq);
+        }
+      } else if (transferPurpose === 'retiro_inversion') {
+        // Desde Inversión hacia Liquidez
+        if (!selectedAccount || !isInvestmentAccount(selectedAccount)) {
+          setSelectedAccount(invAccs[0] || 'Schwab');
+        }
+        if (!toAccount || isInvestmentAccount(toAccount)) {
+          setToAccount(liqAccs[0] || accounts[0]);
+        }
+      }
+    } else {
+      if (!selectedAccount) {
+        setSelectedAccount(liqAccs[0] || accounts[0]);
+      }
     }
-    if (accounts.length > 1 && !toAccount) {
-      setToAccount(accounts[1]);
-    }
-  }, [accounts, selectedAccount, toAccount]);
+  }, [type, transferPurpose, accounts, groupedAccounts]);
 
   const currentCategoryObj = categories.find(c => c.name === selectedCategory);
   const subcategories = currentCategoryObj?.subcategories || [];
@@ -77,6 +116,18 @@ export default function QuickExpenseModal({
       setSelectedSubcategory(cat.subcategories[0]);
     } else {
       setSelectedSubcategory('');
+    }
+  };
+
+  // Convertir gasto a transferencia de ahorro
+  const handleConvertToTransfer = () => {
+    setType('transfer');
+    setTransferPurpose('aporte_inversion');
+    const invAccs = groupedAccounts.investment;
+    // Si la subcategoría coincide con una cuenta o destino de inversión, preseleccionarla
+    const matched = invAccs.find(acc => acc.toLowerCase() === (selectedSubcategory || '').toLowerCase());
+    if (matched) {
+      setToAccount(matched);
     }
   };
 
@@ -121,19 +172,54 @@ export default function QuickExpenseModal({
       return;
     }
 
-    const transactionData = {
-      id: `manual_${Date.now()}`,
-      type,
-      date,
-      amount: numericAmount,
-      account: selectedAccount,
-      toAccount: type === 'transfer' ? toAccount : undefined,
-      category: type === 'expense' ? selectedCategory : (type === 'income' ? 'Ingreso' : 'Transferencia'),
-      subcategory: type === 'expense' ? selectedSubcategory : '',
-      payee: payee.trim(),
-      notes: notes.trim(),
-      device: 'Web App'
-    };
+    let transactionData;
+
+    if (type === 'transfer') {
+      const transferKind = classifyTransfer(selectedAccount, toAccount);
+      transactionData = {
+        id: `manual_${Date.now()}`,
+        type: 'transfer',
+        transferKind, // 'investment_contribution' | 'internal_liquidity' | 'investment_withdrawal'
+        date,
+        amount: numericAmount,
+        account: selectedAccount,
+        fromAccount: selectedAccount,
+        toAccount,
+        category: transferKind === 'investment_contribution' ? 'Aporte Inversión' : 'Transferencia',
+        subcategory: toAccount,
+        payee: payee.trim() || (transferKind === 'investment_contribution' ? `Aporte a ${toAccount}` : `Traspaso a ${toAccount}`),
+        notes: notes.trim(),
+        device: 'Web App'
+      };
+    } else if (type === 'income') {
+      transactionData = {
+        id: `manual_${Date.now()}`,
+        type: 'income',
+        date,
+        amount: numericAmount,
+        account: selectedAccount,
+        description: payee.trim() || 'Ingreso',
+        payee: payee.trim() || 'Ingreso',
+        category: 'Ingreso',
+        subcategory: '',
+        notes: notes.trim(),
+        device: 'Web App'
+      };
+    } else {
+      // Gasto
+      transactionData = {
+        id: `manual_${Date.now()}`,
+        type: 'expense',
+        date,
+        amount: numericAmount,
+        account: selectedAccount,
+        category: selectedCategory,
+        subcategory: selectedSubcategory,
+        payee: payee.trim(),
+        notes: notes.trim(),
+        device: 'Web App'
+      };
+    }
 
     onSave(transactionData);
     setAmountStr('0');
@@ -143,6 +229,8 @@ export default function QuickExpenseModal({
   };
 
   if (!isOpen) return null;
+
+  const isInvestmentGastoAlert = type === 'expense' && selectedCategory.toLowerCase() === 'inversion';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-200">
@@ -160,7 +248,7 @@ export default function QuickExpenseModal({
                   : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100'
               }`}
             >
-              Gasto
+              Costo de Vida (Gasto)
             </button>
             <button
               type="button"
@@ -178,11 +266,11 @@ export default function QuickExpenseModal({
               onClick={() => setType('transfer')}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                 type === 'transfer'
-                  ? 'bg-sky-600 text-white shadow-xs'
+                  ? 'bg-teal-600 text-white shadow-xs'
                   : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-100'
               }`}
             >
-              Transferencia
+              Transferencia / Ahorro
             </button>
           </div>
 
@@ -201,19 +289,89 @@ export default function QuickExpenseModal({
           {/* Display Grande del Monto */}
           <div className="bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 text-center">
             <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
-              Monto del {type === 'expense' ? 'Gasto' : type === 'income' ? 'Ingreso' : 'Traslado'}
+              {type === 'expense' ? 'Monto del Costo de Vida' : type === 'income' ? 'Monto del Ingreso' : 'Monto a Transferir / Ahorrar'}
             </div>
             <div className="flex items-center justify-center gap-1">
               <span className="text-2xl font-bold text-slate-400">$</span>
               <span className={`text-4xl sm:text-5xl font-black tracking-tight ${
                 type === 'expense' ? 'text-rose-600 dark:text-rose-400' :
                 type === 'income' ? 'text-emerald-600 dark:text-emerald-400' :
-                'text-sky-600 dark:text-sky-400'
+                'text-teal-600 dark:text-teal-400'
               }`}>
                 {amountStr}
               </span>
             </div>
           </div>
+
+          {/* Sub-propósito de la transferencia si type === 'transfer' */}
+          {type === 'transfer' && (
+            <div className="bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/50 p-2.5 rounded-xl space-y-1.5">
+              <div className="text-[11px] font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm">swap_horiz</span>
+                ¿Qué tipo de movimiento es?
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTransferPurpose('aporte_inversion')}
+                  className={`px-2 py-2 text-[11px] font-bold rounded-lg transition-all text-center leading-tight ${
+                    transferPurpose === 'aporte_inversion'
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'bg-white/80 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-white'
+                  }`}
+                >
+                  📈 Aporte a Inversión
+                  <span className="block text-[9px] font-normal opacity-80">(Mi Ahorro)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTransferPurpose('traspaso_liquidez')}
+                  className={`px-2 py-2 text-[11px] font-bold rounded-lg transition-all text-center leading-tight ${
+                    transferPurpose === 'traspaso_liquidez'
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'bg-white/80 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-white'
+                  }`}
+                >
+                  💳 Traspaso Interno
+                  <span className="block text-[9px] font-normal opacity-80">(Bancos / Tarjetas)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTransferPurpose('retiro_inversion')}
+                  className={`px-2 py-2 text-[11px] font-bold rounded-lg transition-all text-center leading-tight ${
+                    transferPurpose === 'retiro_inversion'
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'bg-white/80 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:bg-white'
+                  }`}
+                >
+                  🔄 Retiro Inversión
+                  <span className="block text-[9px] font-normal opacity-80">(Hacia Banco)</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Banner asistido si es gasto de inversión */}
+          {isInvestmentGastoAlert && (
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-3 flex items-start gap-2.5">
+              <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-lg shrink-0 mt-0.5">
+                tips_and_updates
+              </span>
+              <div className="text-xs text-amber-900 dark:text-amber-200 space-y-1.5 flex-1">
+                <p className="font-semibold">¿Este dinero es para hacer crecer tu patrimonio?</p>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                  Si va hacia Schwab, Fortesza, Jubilación o Fondos, regístralo como <strong>Transferencia a Inversión (Ahorro)</strong> para que no infle artificialmente tu costo de vida.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleConvertToTransfer}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] rounded-lg transition-all shadow-xs"
+                >
+                  Convertir a Transferencia de Ahorro
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Teclado Numérico Táctil */}
           <div className="grid grid-cols-4 gap-2">
@@ -254,7 +412,7 @@ export default function QuickExpenseModal({
               <>
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1.5">
-                    Categoría
+                    Categoría de Gasto
                   </label>
                   <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
                     {categories.map((c) => (
@@ -318,36 +476,50 @@ export default function QuickExpenseModal({
               </div>
             )}
 
-            {/* Cuenta de Pago / Destino */}
+            {/* Cuentas Origen y Destino */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1">
-                  {type === 'transfer' ? 'Desde Cuenta' : type === 'income' ? '¿En qué cuenta entra el dinero?' : 'Cuenta / Tarjeta'}
+                  {type === 'transfer' ? 'Desde Cuenta (Origen)' : type === 'income' ? '¿En qué cuenta entra?' : 'Cuenta / Tarjeta de Pago'}
                 </label>
                 <select
                   value={selectedAccount}
                   onChange={(e) => setSelectedAccount(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 dark:text-zinc-100 outline-none cursor-pointer"
                 >
-                  {accounts.map((acc) => (
-                    <option key={acc} value={acc}>{acc}</option>
-                  ))}
+                  <optgroup label="Bolsa de Liquidez (Bancos, Ahorros, Tarjetas)">
+                    {groupedAccounts.liquidity.map((acc) => (
+                      <option key={acc} value={acc}>{acc}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Bolsa de Inversión (Brokers, Jubilación, Fondos)">
+                    {groupedAccounts.investment.map((acc) => (
+                      <option key={acc} value={acc}>{acc}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
 
               {type === 'transfer' && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-zinc-400 mb-1">
-                    Hacia Cuenta
+                    Hacia Cuenta (Destino)
                   </label>
                   <select
                     value={toAccount}
                     onChange={(e) => setToAccount(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 dark:text-zinc-100 outline-none cursor-pointer"
                   >
-                    {accounts.map((acc) => (
-                      <option key={acc} value={acc}>{acc}</option>
-                    ))}
+                    <optgroup label="Bolsa de Inversión (Tu Ahorro Real)">
+                      {groupedAccounts.investment.map((acc) => (
+                        <option key={acc} value={acc}>{acc}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Bolsa de Liquidez (Bancos, Ahorros, Tarjetas)">
+                      {groupedAccounts.liquidity.map((acc) => (
+                        <option key={acc} value={acc}>{acc}</option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
               )}
@@ -400,11 +572,11 @@ export default function QuickExpenseModal({
             className={`flex-2 py-3 px-4 rounded-xl text-xs font-bold text-white shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 ${
               type === 'expense' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20' :
               type === 'income' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' :
-              'bg-sky-600 hover:bg-sky-700 shadow-sky-600/20'
+              'bg-teal-600 hover:bg-teal-700 shadow-teal-600/20'
             }`}
           >
             <span className="material-symbols-outlined text-base">check</span>
-            Guardar {type === 'expense' ? 'Gasto' : type === 'income' ? 'Ingreso' : 'Transferencia'}
+            Guardar {type === 'expense' ? 'Costo de Vida' : type === 'income' ? 'Ingreso' : 'Transferencia'}
           </button>
         </div>
 

@@ -11,6 +11,8 @@
  * and pre-computes monthly and yearly aggregates for high-performance dashboard charts.
  */
 
+import { isInvestmentAccount, classifyTransaction, classifyTransfer } from './accountClassification.js';
+
 export function parseCsvRows(text) {
   if (!text) return [];
   const rows = [];
@@ -212,11 +214,23 @@ export function parseHomeBudgetCsv(csvText) {
         month: monthStr,
         year: y,
         monthNum: m,
+        // Raw totals (HomeBudget tradicional)
         totalExpenses: 0,
         totalIncome: 0,
         netSavings: 0,
         savingsRate: 0,
+        // Modelo 2 Bolsas: Liquidez vs Inversión (Ahorro Real)
+        livingExpenses: 0,             // Costo de vida real (excluye Inversión)
+        investmentSavings: 0,          // Aportes a inversión / Ahorro Real
+        realNetSavings: 0,             // totalIncome - livingExpenses
+        realSavingsRate: 0,            // (investmentSavings / totalIncome) * 100
+        freeCashFlow: 0,               // totalIncome - livingExpenses - investmentSavings
+        internalTransfersCount: 0,     // Traspasos dentro de la bolsa de liquidez
+        internalTransfersAmount: 0,
+
         expensesByCategory: {},
+        livingExpensesByCategory: {},  // Solo gastos de consumo real
+        investmentBySubcategory: {},   // Jubilación, Schwab, Fortesza, etc.
         expensesBySubcategory: {},
         incomeBySource: {},
         expensesByAccount: {},
@@ -228,19 +242,33 @@ export function parseHomeBudgetCsv(csvText) {
     return monthlyMap[monthStr];
   }
 
+  // Acumulador histórico de aportes por destino de inversión
+  const cumulativeInvestmentByTarget = {};
+
   for (const exp of expenses) {
     const month = exp.date.substring(0, 7);
     const m = getMonthObj(month);
     m.totalExpenses = Math.round((m.totalExpenses + exp.amount) * 100) / 100;
     m.expensesCount++;
 
-    // By category
     const cat = exp.category || 'Otros';
+    const sub = exp.subcategory || 'General';
+    const isInvestment = cat.toLowerCase() === 'inversion' || isInvestmentAccount(exp.account);
+
+    if (isInvestment) {
+      m.investmentSavings = Math.round((m.investmentSavings + exp.amount) * 100) / 100;
+      m.investmentBySubcategory[sub] = Math.round(((m.investmentBySubcategory[sub] || 0) + exp.amount) * 100) / 100;
+      cumulativeInvestmentByTarget[sub] = Math.round(((cumulativeInvestmentByTarget[sub] || 0) + exp.amount) * 100) / 100;
+    } else {
+      m.livingExpenses = Math.round((m.livingExpenses + exp.amount) * 100) / 100;
+      m.livingExpensesByCategory[cat] = Math.round(((m.livingExpensesByCategory[cat] || 0) + exp.amount) * 100) / 100;
+    }
+
+    // By category
     m.expensesByCategory[cat] = Math.round(((m.expensesByCategory[cat] || 0) + exp.amount) * 100) / 100;
 
     // By subcategory
     if (!m.expensesBySubcategory[cat]) m.expensesBySubcategory[cat] = {};
-    const sub = exp.subcategory || 'General';
     m.expensesBySubcategory[cat][sub] = Math.round(((m.expensesBySubcategory[cat][sub] || 0) + exp.amount) * 100) / 100;
 
     // By account
@@ -263,9 +291,22 @@ export function parseHomeBudgetCsv(csvText) {
     const month = trn.date.substring(0, 7);
     const m = getMonthObj(month);
     m.transfersCount++;
+
+    const transferType = classifyTransfer(trn.fromAccount, trn.toAccount);
+    if (transferType === 'investment_contribution') {
+      m.investmentSavings = Math.round((m.investmentSavings + trn.amount) * 100) / 100;
+      const target = trn.toAccount || 'Inversión';
+      m.investmentBySubcategory[target] = Math.round(((m.investmentBySubcategory[target] || 0) + trn.amount) * 100) / 100;
+      cumulativeInvestmentByTarget[target] = Math.round(((cumulativeInvestmentByTarget[target] || 0) + trn.amount) * 100) / 100;
+    } else if (transferType === 'investment_withdrawal') {
+      m.investmentSavings = Math.round((m.investmentSavings - trn.amount) * 100) / 100;
+    } else {
+      m.internalTransfersCount++;
+      m.internalTransfersAmount = Math.round((m.internalTransfersAmount + trn.amount) * 100) / 100;
+    }
   }
 
-  // Calculate netSavings & savingsRate per month
+  // Calculate netSavings, realSavingsRate & freeCashFlow per month
   const monthlySummaries = Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month));
   for (const m of monthlySummaries) {
     m.netSavings = Math.round((m.totalIncome - m.totalExpenses) * 100) / 100;
@@ -273,6 +314,15 @@ export function parseHomeBudgetCsv(csvText) {
       m.savingsRate = Math.round(((m.totalIncome - m.totalExpenses) / m.totalIncome) * 1000) / 10;
     } else {
       m.savingsRate = m.totalExpenses > 0 ? -100 : 0;
+    }
+
+    // 2-Pool normalized metrics
+    m.realNetSavings = Math.round((m.totalIncome - m.livingExpenses) * 100) / 100;
+    m.freeCashFlow = Math.round((m.totalIncome - m.livingExpenses - m.investmentSavings) * 100) / 100;
+    if (m.totalIncome > 0) {
+      m.realSavingsRate = Math.round((m.investmentSavings / m.totalIncome) * 1000) / 10;
+    } else {
+      m.realSavingsRate = 0;
     }
   }
 
@@ -284,38 +334,59 @@ export function parseHomeBudgetCsv(csvText) {
       yearlyMap[y] = {
         year: y,
         totalExpenses: 0,
+        livingExpenses: 0,
+        investmentSavings: 0,
         totalIncome: 0,
         netSavings: 0,
+        freeCashFlow: 0,
         savingsRate: 0,
+        realSavingsRate: 0,
         expensesByCategory: {},
+        livingExpensesByCategory: {},
+        investmentBySubcategory: {},
         monthsCount: 0
       };
     }
     const yr = yearlyMap[y];
     yr.totalExpenses = Math.round((yr.totalExpenses + m.totalExpenses) * 100) / 100;
+    yr.livingExpenses = Math.round((yr.livingExpenses + m.livingExpenses) * 100) / 100;
+    yr.investmentSavings = Math.round((yr.investmentSavings + m.investmentSavings) * 100) / 100;
     yr.totalIncome = Math.round((yr.totalIncome + m.totalIncome) * 100) / 100;
     yr.monthsCount++;
 
     for (const [cat, amt] of Object.entries(m.expensesByCategory)) {
       yr.expensesByCategory[cat] = Math.round(((yr.expensesByCategory[cat] || 0) + amt) * 100) / 100;
     }
+    for (const [cat, amt] of Object.entries(m.livingExpensesByCategory)) {
+      yr.livingExpensesByCategory[cat] = Math.round(((yr.livingExpensesByCategory[cat] || 0) + amt) * 100) / 100;
+    }
+    for (const [sub, amt] of Object.entries(m.investmentBySubcategory)) {
+      yr.investmentBySubcategory[sub] = Math.round(((yr.investmentBySubcategory[sub] || 0) + amt) * 100) / 100;
+    }
   }
 
   const yearlySummaries = Object.values(yearlyMap).sort((a, b) => a.year - b.year);
   for (const yr of yearlySummaries) {
     yr.netSavings = Math.round((yr.totalIncome - yr.totalExpenses) * 100) / 100;
+    yr.freeCashFlow = Math.round((yr.totalIncome - yr.livingExpenses - yr.investmentSavings) * 100) / 100;
     if (yr.totalIncome > 0) {
       yr.savingsRate = Math.round(((yr.totalIncome - yr.totalExpenses) / yr.totalIncome) * 1000) / 10;
+      yr.realSavingsRate = Math.round((yr.investmentSavings / yr.totalIncome) * 1000) / 10;
     } else {
       yr.savingsRate = yr.totalExpenses > 0 ? -100 : 0;
+      yr.realSavingsRate = 0;
     }
     yr.monthlyAvgExpense = yr.monthsCount > 0 ? Math.round((yr.totalExpenses / yr.monthsCount) * 100) / 100 : 0;
+    yr.monthlyAvgLivingExpense = yr.monthsCount > 0 ? Math.round((yr.livingExpenses / yr.monthsCount) * 100) / 100 : 0;
+    yr.monthlyAvgInvestment = yr.monthsCount > 0 ? Math.round((yr.investmentSavings / yr.monthsCount) * 100) / 100 : 0;
     yr.monthlyAvgIncome = yr.monthsCount > 0 ? Math.round((yr.totalIncome / yr.monthsCount) * 100) / 100 : 0;
   }
 
   // Overall Stats
   const totalExp = Math.round(expenses.reduce((s, e) => s + e.amount, 0) * 100) / 100;
   const totalInc = Math.round(incomes.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+  const totalInv = Math.round(Object.values(cumulativeInvestmentByTarget).reduce((s, v) => s + v, 0) * 100) / 100;
+  const totalLiving = Math.round((totalExp - totalInv) * 100) / 100;
 
   return {
     expenses,
@@ -328,10 +399,14 @@ export function parseHomeBudgetCsv(csvText) {
     incomeSources,
     monthlySummaries,
     yearlySummaries,
+    cumulativeInvestmentByTarget,
     stats: {
       totalExpenses: totalExp,
+      totalLivingExpenses: totalLiving,
+      totalInvestmentSavings: totalInv,
       totalIncome: totalInc,
       netSavings: Math.round((totalInc - totalExp) * 100) / 100,
+      realSavingsRate: totalInc > 0 ? Math.round((totalInv / totalInc) * 1000) / 10 : 0,
       expensesCount: expenses.length,
       incomesCount: incomes.length,
       transfersCount: transfers.length,

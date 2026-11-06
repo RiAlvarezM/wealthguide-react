@@ -46,6 +46,7 @@ const summaryData = {
   budgets: result.budgets,
   monthlySummaries: result.monthlySummaries,
   yearlySummaries: result.yearlySummaries,
+  cumulativeInvestmentByTarget: result.cumulativeInvestmentByTarget,
   // Recent transactions (last 300) for instant preview
   recentExpenses: result.expenses.slice(-300).reverse(),
   recentIncomes: result.incomes.slice(-100).reverse(),
