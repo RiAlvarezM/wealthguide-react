@@ -430,6 +430,45 @@ export default function HomeBudgetDashboard() {
 
       </div>
 
+      {/* Banner Destacado: Tu Ahorro Real en Inversión (Separado de Gastos) */}
+      <div className="bg-gradient-to-r from-teal-500/10 via-emerald-500/10 to-teal-500/5 border border-teal-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold shadow-sm shrink-0">
+            <span className="material-symbols-outlined text-xl">trending_up</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-teal-900 dark:text-teal-200 uppercase tracking-wider">
+                Tu Ahorro Real en Inversión ({formatMonthLabel(selectedMonth)})
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950 text-teal-800 dark:text-teal-300">
+                Separado de Gastos de Vida
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+              Tasa de ahorro real este mes: <span className="font-bold text-teal-600 dark:text-teal-400">{currentMonthData.realSavingsRate.toFixed(1)}%</span> de tus ingresos
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+          <div className="text-right">
+            <div className="text-xs text-slate-400 font-medium">Aportado a Brokers/Jubilación</div>
+            <div className="text-xl sm:text-2xl font-black text-teal-600 dark:text-teal-400 font-mono">
+              +{formatCurrency(currentMonthData.investmentSavings || 0)}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsCuentasOpen(true)}
+            className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors whitespace-nowrap"
+          >
+            Ver Aportes
+          </button>
+        </div>
+      </div>
+
       {/* 3. PANEL DE DISPONIBILIDAD PRESUPUESTARIA + 4. GRÁFICO CASH FLOW */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
         

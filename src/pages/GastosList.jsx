@@ -107,6 +107,8 @@ export default function GastosList() {
 
   // Modo de visualización: 'category' (Accordion) | 'date' (Por Fecha)
   const [viewGrouping, setViewGrouping] = useState('category');
+  // Filtro de bolsa: 'living' (Costo de Vida) | 'investment' (Mi Ahorro Real) | 'all' (Todos)
+  const [subFilter, setSubFilter] = useState('living');
   // Categorías expandidas
   const [expandedCategories, setExpandedCategories] = useState({});
 
@@ -117,21 +119,30 @@ export default function GastosList() {
     }));
   };
 
-  // Filtrar solo transacciones de gasto (según modo 2 Bolsas: excluye o incluye inversión)
-  const expenseTransactions = useMemo(() => {
-    return allCurrentMonthTransactions.filter(t => {
-      if (t.type !== 'expense') return false;
-      if (viewMode === 'pools') {
-        return t.poolKind === 'living';
-      }
-      return true;
-    });
-  }, [allCurrentMonthTransactions, viewMode]);
+  // Filtrar transacciones según subFilter y viewMode
+  const rawExpenseTxs = useMemo(() => {
+    return allCurrentMonthTransactions.filter(t => t.type === 'expense' || t.poolKind === 'investment');
+  }, [allCurrentMonthTransactions]);
 
-  // Total gastado en el mes
+  const livingTxs = useMemo(() => rawExpenseTxs.filter(t => t.poolKind === 'living'), [rawExpenseTxs]);
+  const investmentTxs = useMemo(() => rawExpenseTxs.filter(t => t.poolKind === 'investment'), [rawExpenseTxs]);
+
+  const livingTotal = useMemo(() => livingTxs.reduce((s, t) => s + t.amount, 0), [livingTxs]);
+  const investmentTotal = useMemo(() => investmentTxs.reduce((s, t) => s + t.amount, 0), [investmentTxs]);
+  const allTotal = useMemo(() => rawExpenseTxs.reduce((s, t) => s + t.amount, 0), [rawExpenseTxs]);
+
+  const expenseTransactions = useMemo(() => {
+    if (subFilter === 'living') return livingTxs;
+    if (subFilter === 'investment') return investmentTxs;
+    return rawExpenseTxs;
+  }, [subFilter, livingTxs, investmentTxs, rawExpenseTxs]);
+
+  // Total mostrado en el encabezado
   const totalPeriodExpenses = useMemo(() => {
-    return expenseTransactions.reduce((s, t) => s + t.amount, 0);
-  }, [expenseTransactions]);
+    if (subFilter === 'living') return livingTotal;
+    if (subFilter === 'investment') return investmentTotal;
+    return allTotal;
+  }, [subFilter, livingTotal, investmentTotal, allTotal]);
 
   // Agrupación por Categoría para Accordion
   const groupedByCategory = useMemo(() => {
@@ -233,6 +244,47 @@ export default function GastosList() {
             <span className="hidden sm:inline">Nuevo Gasto</span>
           </button>
         </div>
+      </div>
+
+      {/* Selector de Bolsa: Costo de Vida vs Mi Ahorro / Inversión */}
+      <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1 scrollbar-thin">
+        <button
+          type="button"
+          onClick={() => setSubFilter('living')}
+          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
+            subFilter === 'living'
+              ? 'bg-rose-600 text-white shadow-xs'
+              : 'bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-50'
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">shopping_bag</span>
+          <span>Costo de Vida Real ({formatCurrency(livingTotal)})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubFilter('investment')}
+          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
+            subFilter === 'investment'
+              ? 'bg-teal-600 text-white shadow-xs'
+              : 'bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-50'
+          }`}
+        >
+          <span className="material-symbols-outlined text-sm">trending_up</span>
+          <span>Mi Ahorro / Inversión ({formatCurrency(investmentTotal)})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubFilter('all')}
+          className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
+            subFilter === 'all'
+              ? 'bg-slate-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-xs'
+              : 'bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-50'
+          }`}
+        >
+          <span>Todos ({formatCurrency(allTotal)})</span>
+        </button>
       </div>
 
       {/* 2. MODO DE VISUALIZACIÓN: POR CATEGORÍA (ACCORDION) */}
