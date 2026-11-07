@@ -4,8 +4,12 @@ import { useTheme } from '../../context/ThemeContext';
 import { useWorkspace, WORKSPACE_MODES } from '../../context/WorkspaceContext';
 
 const DIARIO_NAV_ITEMS = [
-  { to: '/presupuesto', icon: 'receipt_long', label: 'Diario & Presupuesto' },
-  { to: '/efectivo', icon: 'payments', label: 'Efectivo Diario' },
+  { to: '/presupuesto', icon: 'home', label: 'Dashboard Home' },
+  { to: '/gastos', icon: 'shopping_bag', label: 'Gastos por Categoría' },
+  { to: '/ingresos', icon: 'payments', label: 'Ingresos por Fuente' },
+  { to: '/presupuesto-detalle', icon: 'track_changes', label: 'Presupuesto vs Real' },
+  { to: '/tendencia', icon: 'show_chart', label: 'Tendencia & Flujo' },
+  { to: '/efectivo', icon: 'receipt_long', label: 'Efectivo Diario' },
   { to: '/configuracion', icon: 'settings', label: 'Configuración' },
 ];
 

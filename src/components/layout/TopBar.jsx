@@ -6,7 +6,7 @@ export default function TopBar({ title, searchPlaceholder = 'Buscar...' }) {
   const { mode, switchMode, isDiario, isPatrimonio } = useWorkspace();
 
   return (
-    <header className="flex justify-between items-center px-4 sm:px-6 h-16 border-b border-slate-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md sticky top-0 z-40 md:ml-[260px] transition-colors">
+    <header className="flex justify-between items-center px-4 sm:px-6 h-16 border-b border-slate-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md sticky top-0 z-40 transition-colors">
       <div className="flex items-center gap-3 sm:gap-4">
         <div className="md:hidden flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-xs shadow-xs">

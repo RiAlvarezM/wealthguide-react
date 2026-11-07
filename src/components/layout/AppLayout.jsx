@@ -23,31 +23,55 @@ export default function AppLayout({ title, searchPlaceholder, children }) {
             <NavLink
               to="/presupuesto"
               className={({ isActive }) =>
-                `flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold rounded-xl transition-colors ${
+                `flex flex-col items-center gap-0.5 px-2.5 py-1 text-[10px] font-bold rounded-xl transition-colors ${
                   isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-zinc-400'
                 }`
               }
             >
-              <span className="material-symbols-outlined text-[20px]">receipt_long</span>
-              <span>Diario</span>
+              <span className="material-symbols-outlined text-[20px]">home</span>
+              <span>Inicio</span>
             </NavLink>
 
             <NavLink
-              to="/efectivo"
+              to="/gastos"
               className={({ isActive }) =>
-                `flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold rounded-xl transition-colors ${
+                `flex flex-col items-center gap-0.5 px-2.5 py-1 text-[10px] font-bold rounded-xl transition-colors ${
+                  isActive ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-zinc-400'
+                }`
+              }
+            >
+              <span className="material-symbols-outlined text-[20px]">shopping_bag</span>
+              <span>Gastos</span>
+            </NavLink>
+
+            <NavLink
+              to="/ingresos"
+              className={({ isActive }) =>
+                `flex flex-col items-center gap-0.5 px-2.5 py-1 text-[10px] font-bold rounded-xl transition-colors ${
                   isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-zinc-400'
                 }`
               }
             >
               <span className="material-symbols-outlined text-[20px]">payments</span>
-              <span>Efectivo</span>
+              <span>Ingresos</span>
+            </NavLink>
+
+            <NavLink
+              to="/tendencia"
+              className={({ isActive }) =>
+                `flex flex-col items-center gap-0.5 px-2.5 py-1 text-[10px] font-bold rounded-xl transition-colors ${
+                  isActive ? 'text-teal-600 dark:text-teal-400' : 'text-slate-500 dark:text-zinc-400'
+                }`
+              }
+            >
+              <span className="material-symbols-outlined text-[20px]">show_chart</span>
+              <span>Tendencia</span>
             </NavLink>
 
             <button
               type="button"
               onClick={() => switchMode(WORKSPACE_MODES.PATRIMONIO)}
-              className="flex flex-col items-center gap-0.5 px-3 py-1 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-900"
+              className="flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 rounded-xl"
             >
               <span className="material-symbols-outlined text-[20px] text-sky-500">account_balance</span>
               <span>Patrimonio ➔</span>

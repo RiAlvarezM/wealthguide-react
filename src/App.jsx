@@ -12,12 +12,18 @@ import PatrimonioNeto from './pages/PatrimonioNeto';
 import Resumen from './pages/Resumen';
 import EfectivoDiario from './pages/EfectivoDiario';
 import Presupuesto from './pages/Presupuesto';
+import HomeBudgetDashboard from './pages/HomeBudgetDashboard';
+import GastosList from './pages/GastosList';
+import IngresosList from './pages/IngresosList';
+import PresupuestoVsReal from './pages/PresupuestoVsReal';
+import TendenciaFlujo from './pages/TendenciaFlujo';
 import Simuladores from './pages/Simuladores';
 import Jubilacion from './pages/Jubilacion';
 import Prestamos from './pages/Prestamos';
 import { AmortizacionProvider } from './context/AmortizacionContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
+import { HomeBudgetProvider } from './context/HomeBudgetContext';
 import Lealtad from './pages/Lealtad';
 import Configuracion from './pages/Configuracion';
 
@@ -33,6 +39,7 @@ export default function App() {
                   <AmortizacionProvider>
                   <BrowserRouter>
                     <WorkspaceProvider>
+                      <HomeBudgetProvider>
                       <Routes>
                     <Route path="/login" element={<Login />} />
 
@@ -65,12 +72,48 @@ export default function App() {
                       path="/presupuesto"
                       element={
                         <ProtectedRoute>
-                          <Presupuesto />
+                          <HomeBudgetDashboard />
                         </ProtectedRoute>
                       }
                     />
                     <Route
+                      path="/homebudget"
+                      element={<Navigate to="/presupuesto" replace />}
+                    />
+                    <Route
                       path="/gastos"
+                      element={
+                        <ProtectedRoute>
+                          <GastosList />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/ingresos"
+                      element={
+                        <ProtectedRoute>
+                          <IngresosList />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/presupuesto-detalle"
+                      element={
+                        <ProtectedRoute>
+                          <PresupuestoVsReal />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/tendencia"
+                      element={
+                        <ProtectedRoute>
+                          <TendenciaFlujo />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/presupuesto-antiguo"
                       element={
                         <ProtectedRoute>
                           <Presupuesto />
@@ -121,6 +164,7 @@ export default function App() {
                     <Route path="/" element={<Navigate to="/efectivo" replace />} />
                     <Route path="*" element={<Navigate to="/efectivo" replace />} />
                     </Routes>
+                      </HomeBudgetProvider>
                   </WorkspaceProvider>
                 </BrowserRouter>
               </AmortizacionProvider>
