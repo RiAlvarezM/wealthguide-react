@@ -8,11 +8,13 @@
 //   • Actualización en tiempo real con soporte Dark Mode y números tabulares.
 
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
 import { useAccounts } from '../context/AccountsContext';
 import { useProperties } from '../context/PropertiesContext';
 import { useVehicles, estimateCurrentValue, estimateMonthlyDepreciation } from '../context/VehiclesContext';
 import { useNetworthHistory } from '../context/NetworthHistoryContext';
+import ConciliacionFinDeMesModal from '../components/homebudget/ConciliacionFinDeMesModal';
 
 // Formato de moneda con decimales limpios
 const formatCurrency = (value) =>
@@ -40,6 +42,7 @@ const CATEGORY_META = {
 };
 
 export default function PatrimonioNeto() {
+  const navigate = useNavigate();
   const { accounts: allAccounts, updateAccount } = useAccounts();
   const { properties } = useProperties();
   const { vehicles } = useVehicles();
@@ -51,6 +54,7 @@ export default function PatrimonioNeto() {
   const [saved, setSaved] = useState({});
   const [checkedFields, setCheckedFields] = useState({});
   const [alert, setAlert] = useState(null);
+  const [isConciliacionOpen, setIsConciliacionOpen] = useState(false);
 
   const effectiveAmount = (acc) =>
     edits[acc.id] !== undefined ? Number(edits[acc.id]) : acc.amount;
@@ -311,7 +315,7 @@ export default function PatrimonioNeto() {
         {/* Left column: Account Input Forms */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 p-6 shadow-xs">
-            <div className="flex items-center justify-between mb-6 border-b border-slate-100 dark:border-zinc-800 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 border-b border-slate-100 dark:border-zinc-800 pb-4">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
                   <span className="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-[20px]">
@@ -320,8 +324,19 @@ export default function PatrimonioNeto() {
                   Actualización de Valores por Cuenta
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                  Modifica los balances actuales o confirma con el checkbox para guardar el snapshot histórico.
+                  Modifica los balances actuales o concilia automáticamente con el flujo del mes.
                 </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsConciliacionOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition-all"
+                >
+                  <span className="material-symbols-outlined text-sm">sync_alt</span>
+                  <span>Conciliar con HomeBudget</span>
+                </button>
               </div>
             </div>
 
@@ -556,6 +571,11 @@ export default function PatrimonioNeto() {
           </div>
         </div>
       </div>
+
+      <ConciliacionFinDeMesModal
+        isOpen={isConciliacionOpen}
+        onClose={() => setIsConciliacionOpen(false)}
+      />
     </AppLayout>
   );
 }

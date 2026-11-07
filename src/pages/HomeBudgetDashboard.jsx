@@ -5,6 +5,7 @@ import ChartCanvas from '../components/ChartCanvas';
 import SemicircleGauge from '../components/homebudget/SemicircleGauge';
 import BeneficiariosModal from '../components/homebudget/BeneficiariosModal';
 import CuentasModal from '../components/homebudget/CuentasModal';
+import ConciliacionFinDeMesModal from '../components/homebudget/ConciliacionFinDeMesModal';
 import QuickExpenseModal from '../components/gastos/QuickExpenseModal';
 import { useHomeBudget } from '../context/HomeBudgetContext';
 import { useTheme } from '../context/ThemeContext';
@@ -73,6 +74,17 @@ export default function HomeBudgetDashboard() {
     isCuentasOpen,
     setIsCuentasOpen
   } = useHomeBudget();
+
+  const [isConciliacionOpen, setIsConciliacionOpen] = useState(false);
+
+  const isReconciled = useMemo(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('wealthguide_reconciled_months') || '{}');
+      return Boolean(saved[selectedMonth]);
+    } catch (e) {
+      return false;
+    }
+  }, [selectedMonth, isConciliacionOpen]);
 
   // Presupuesto mensual objetivo del ciclo
   const monthlyBudget = useMemo(() => {
@@ -540,26 +552,56 @@ export default function HomeBudgetDashboard() {
 
       </div>
 
-      {/* 5. BARRA DE ESTADO / SINCRONIZACIÓN INFERIOR */}
-      <div className="bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 rounded-xl p-3 sm:px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-zinc-400">
-        <div className="flex items-center gap-2">
+      {/* 5. BARRA DE ESTADO / SINCRONIZACIÓN INFERIOR & CONCILIACIÓN */}
+      <div className="bg-slate-50 dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800 rounded-xl p-3 sm:px-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs text-slate-500 dark:text-zinc-400">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs" />
           <span className="font-semibold text-slate-700 dark:text-zinc-300">
-            Perfil Activo: Familia Álvarez Gamboa
+            Perfil: Familia Álvarez Gamboa
           </span>
           <span className="hidden sm:inline">•</span>
-          <span className="hidden sm:inline">101 meses de historia sincronizada</span>
+          <span className="hidden sm:inline">101 meses de historia</span>
+          <span className="hidden sm:inline">•</span>
+          {isReconciled ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200/50 text-[11px]">
+              <span className="material-symbols-outlined text-xs">verified</span>
+              <span>Cierre {selectedMonth} Conciliado</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold border border-amber-200/50 text-[11px]">
+              <span className="material-symbols-outlined text-xs">pending_actions</span>
+              <span>Cierre {selectedMonth} Pendiente</span>
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-3 text-[11px]">
-          <span>Última sincronización: Hoy</span>
+        <div className="flex items-center justify-between md:justify-end gap-2 text-[11px]">
+          <button
+            type="button"
+            onClick={() => setIsConciliacionOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">sync_alt</span>
+            <span>Conciliar Cierre de Mes</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/conciliacion')}
+            className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 font-semibold text-slate-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800"
+            title="Abrir vista completa de conciliación"
+          >
+            <span className="material-symbols-outlined text-sm">open_in_new</span>
+            <span>Ver Detalle</span>
+          </button>
+
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="flex items-center gap-1 font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700"
+            className="flex items-center gap-1 font-bold text-slate-500 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-zinc-200 px-2 py-1.5"
+            title="Recargar datos"
           >
             <span className="material-symbols-outlined text-sm">sync</span>
-            <span>Sincronizar</span>
           </button>
         </div>
       </div>
@@ -610,6 +652,11 @@ export default function HomeBudgetDashboard() {
       <CuentasModal
         isOpen={isCuentasOpen}
         onClose={() => setIsCuentasOpen(false)}
+      />
+
+      <ConciliacionFinDeMesModal
+        isOpen={isConciliacionOpen}
+        onClose={() => setIsConciliacionOpen(false)}
       />
     </AppLayout>
   );

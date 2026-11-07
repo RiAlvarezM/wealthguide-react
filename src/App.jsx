@@ -17,6 +17,7 @@ import GastosList from './pages/GastosList';
 import IngresosList from './pages/IngresosList';
 import PresupuestoVsReal from './pages/PresupuestoVsReal';
 import TendenciaFlujo from './pages/TendenciaFlujo';
+import ConciliacionFinDeMes from './pages/ConciliacionFinDeMes';
 import Simuladores from './pages/Simuladores';
 import Jubilacion from './pages/Jubilacion';
 import Prestamos from './pages/Prestamos';
@@ -109,6 +110,14 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <TendenciaFlujo />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/conciliacion"
+                      element={
+                        <ProtectedRoute>
+                          <ConciliacionFinDeMes />
                         </ProtectedRoute>
                       }
                     />

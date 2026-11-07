@@ -9,6 +9,7 @@ const DIARIO_NAV_ITEMS = [
   { to: '/ingresos', icon: 'payments', label: 'Ingresos por Fuente' },
   { to: '/presupuesto-detalle', icon: 'track_changes', label: 'Presupuesto vs Real' },
   { to: '/tendencia', icon: 'show_chart', label: 'Tendencia & Flujo' },
+  { to: '/conciliacion', icon: 'sync_alt', label: 'Conciliación de Cierre' },
   { to: '/efectivo', icon: 'receipt_long', label: 'Efectivo Diario' },
   { to: '/configuracion', icon: 'settings', label: 'Configuración' },
 ];
