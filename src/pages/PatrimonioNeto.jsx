@@ -482,9 +482,20 @@ export default function PatrimonioNeto() {
                     <span className="w-2 h-2 rounded-full bg-blue-500" />
                     Capa 2: Crecimiento Líquido
                   </span>
-                  <span className="text-xs font-bold text-blue-800 dark:text-blue-300 tabular-nums">
-                    {formatCurrency(totals.capa2Crecimiento)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-blue-800 dark:text-blue-300 tabular-nums">
+                      {formatCurrency(totals.capa2Crecimiento)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/inversiones')}
+                      className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 text-[10px] font-bold hover:bg-blue-200 flex items-center gap-0.5"
+                      title="Ver tracker de rendimiento y plusvalía"
+                    >
+                      <span>ROI</span>
+                      <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                    </button>
+                  </div>
                 </div>
                 <p className="text-[11px] text-blue-700/80 dark:text-blue-400/80">
                   Fondos bursátiles y acciones convertibles a efectivo en días.

@@ -23,6 +23,7 @@ import Simuladores from './pages/Simuladores';
 import Jubilacion from './pages/Jubilacion';
 import Prestamos from './pages/Prestamos';
 import InmueblesHub from './pages/InmueblesHub';
+import InversionesTracker from './pages/InversionesTracker';
 import { AmortizacionProvider } from './context/AmortizacionContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
@@ -156,6 +157,14 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <InmueblesHub />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/inversiones"
+                      element={
+                        <ProtectedRoute>
+                          <InversionesTracker />
                         </ProtectedRoute>
                       }
                     />
