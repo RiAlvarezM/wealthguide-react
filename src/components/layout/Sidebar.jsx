@@ -17,6 +17,7 @@ const DIARIO_NAV_ITEMS = [
 const PATRIMONIO_NAV_ITEMS = [
   { to: '/resumen', icon: 'analytics', label: 'Resumen' },
   { to: '/patrimonio', icon: 'account_balance_wallet', label: 'Patrimonio Neto' },
+  { to: '/inmuebles', icon: 'domain', label: 'Bienes Raíces & Hub' },
   { to: '/prestamos', icon: 'handshake', label: 'Préstamos' },
   { to: '/jubilacion', icon: 'psychology_alt', label: 'Jubilación' },
   { to: '/lealtad', icon: 'loyalty', label: 'Lealtad' },

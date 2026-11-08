@@ -513,12 +513,23 @@ export default function PatrimonioNeto() {
           <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 p-5 shadow-xs">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px]">home</span>
+                <span className="material-symbols-outlined text-[16px]">domain</span>
                 Propiedades ({properties.length})
               </h3>
-              <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
-                {formatCurrency(propiedadesTotal)}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
+                  {formatCurrency(propiedadesTotal)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/inmuebles')}
+                  className="px-2 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200/50 text-[10px] font-bold hover:bg-teal-100 dark:hover:bg-teal-900 flex items-center gap-0.5"
+                  title="Ver ficha integral y cash flow en el Hub Inmobiliario"
+                >
+                  <span>Hub</span>
+                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               {properties.map((p) => (

@@ -4,6 +4,7 @@
 // gráficos interactivos, importación de CSV y control de abonos extraordinarios.
 
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
 import { useAccounts } from '../context/AccountsContext';
 import { useProperties } from '../context/PropertiesContext';
@@ -85,6 +86,7 @@ const TABS = [
 ];
 
 export default function Prestamos() {
+  const navigate = useNavigate();
   const { accounts } = useAccounts();
   const { properties } = useProperties();
   const { schedule, loanMetadata } = useAmortizacion();
@@ -128,16 +130,26 @@ export default function Prestamos() {
             Seguimiento de hipotecas, amortización de capital y abonos extraordinarios.
           </p>
         </div>
-        {hasAmortizacion && (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-secondary text-on-secondary rounded-lg font-label-sm text-label-sm shadow-sm hover:opacity-90 transition-opacity"
+            onClick={() => navigate('/inmuebles')}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
           >
-            <span className="material-symbols-outlined text-[18px]">upload_file</span>
-            Importar Amortización CSV
+            <span className="material-symbols-outlined text-[18px]">domain</span>
+            <span>Ver Hub Inmobiliario</span>
           </button>
-        )}
+          {hasAmortizacion && (
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-secondary text-on-secondary rounded-lg font-label-sm text-label-sm shadow-sm hover:opacity-90 transition-opacity"
+            >
+              <span className="material-symbols-outlined text-[18px]">upload_file</span>
+              Importar Amortización CSV
+            </button>
+          )}
+        </div>
       </header>
 
       {/* KPI Global Row */}

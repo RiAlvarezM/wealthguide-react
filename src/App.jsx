@@ -21,6 +21,7 @@ import ConciliacionFinDeMes from './pages/ConciliacionFinDeMes';
 import Simuladores from './pages/Simuladores';
 import Jubilacion from './pages/Jubilacion';
 import Prestamos from './pages/Prestamos';
+import InmueblesHub from './pages/InmueblesHub';
 import { AmortizacionProvider } from './context/AmortizacionContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
@@ -134,6 +135,14 @@ export default function App() {
                       element={
                         <ProtectedRoute>
                           <Prestamos />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/inmuebles"
+                      element={
+                        <ProtectedRoute>
+                          <InmueblesHub />
                         </ProtectedRoute>
                       }
                     />
