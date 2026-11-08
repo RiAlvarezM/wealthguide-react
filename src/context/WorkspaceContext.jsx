@@ -10,7 +10,7 @@ export const WORKSPACE_MODES = {
 
 // Rutas asociadas a cada modo
 const DIARIO_ROUTES = ['/presupuesto', '/gastos', '/ingresos', '/compromisos', '/calendario', '/presupuesto-detalle', '/tendencia', '/conciliacion', '/efectivo', '/homebudget'];
-const PATRIMONIO_ROUTES = ['/resumen', '/patrimonio', '/inversiones', '/inmuebles', '/prestamos', '/jubilacion', '/lealtad', '/simuladores'];
+const PATRIMONIO_ROUTES = ['/resumen', '/patrimonio', '/fire', '/inversiones', '/inmuebles', '/prestamos', '/jubilacion', '/lealtad', '/simuladores'];
 
 export function WorkspaceProvider({ children }) {
   const location = useLocation();

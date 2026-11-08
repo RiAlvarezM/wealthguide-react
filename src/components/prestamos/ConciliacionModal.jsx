@@ -2,8 +2,8 @@
 //
 // Modal interactivo para conciliar y actualizar cuota por cuota:
 // Permite al usuario editar o confirmar Capital, Intereses, Abono Extra y Gastos
-// para una cuota específica (o agregar la conciliación del mes actual),
-// recalculando el Saldo Real y actualizándolo en Firestore y localmente.
+// para una cuota específica, visualizando la Tasa Teórica vs la Tasa Real del mes,
+// recalculando el Saldo Real en cascada y actualizándolo en Firestore y localmente.
 
 import { useState } from 'react';
 import { useAmortizacion } from '../../context/AmortizacionContext';
@@ -11,7 +11,7 @@ import { useAmortizacion } from '../../context/AmortizacionContext';
 const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 
 export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance = 0 }) {
-  const { schedule, importSchedule, loanId } = useAmortizacion();
+  const { updateScheduleRowCascade } = useAmortizacion();
 
   const [form, setForm] = useState(() => ({
     n: cuota?.n || 1,
@@ -23,6 +23,7 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
     maintenance: cuota?.maintenance || 0,
     expenses: cuota?.expenses || 0,
     note: cuota?.note || '',
+    reconciled: cuota?.reconciled !== undefined ? cuota.reconciled : cuota?.n <= 125,
   }));
 
   const [saving, setSaving] = useState(false);
@@ -31,7 +32,14 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
 
   // Cálculo en vivo del nuevo balance y cuota total
   const calculatedTotal = Number(form.principal) + Number(form.interest) + Number(form.maintenance) + Number(form.expenses);
-  const calculatedBalance = Math.max(0, prevBalance - Number(form.principal) - Number(form.extra));
+  const calculatedBalance = Math.max(0, Number((prevBalance - Number(form.principal) - Number(form.extra)).toFixed(2)));
+
+  // Cálculo en vivo de tasas
+  const theorRate = cuota?.theoreticalRate ?? (cuota?.n <= 21 ? 3.40 : 3.50);
+  const calculatedRealRate = prevBalance > 0 && Number(form.interest) > 0
+    ? (Number(form.interest) / prevBalance) * 12 * 100
+    : 0;
+  const rateDiff = calculatedRealRate - theorRate;
 
   const handleChange = (key, val) => {
     setForm((prev) => ({ ...prev, [key]: val }));
@@ -41,35 +49,16 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
     e.preventDefault();
     setSaving(true);
     try {
-      // Clona y actualiza la cuota en el array del schedule completo
-      const updatedSchedule = schedule.map((row) => {
-        if (row.n === cuota.n) {
-          return {
-            ...row,
-            mesLabel: form.mesLabel,
-            date: form.date,
-            principal: Number(form.principal),
-            interest: Number(form.interest),
-            extra: Number(form.extra),
-            maintenance: Number(form.maintenance),
-            expenses: Number(form.expenses),
-            total: calculatedTotal,
-            balance: calculatedBalance,
-            note: form.note,
-          };
-        }
-        return row;
-      });
-
-      // Recalcular saldos posteriores en cascada si se modificó el capital o abono extra
-      let runningBalance = calculatedBalance;
-      for (let i = cuota.n; i < updatedSchedule.length; i++) {
-        runningBalance = Math.max(0, runningBalance - (updatedSchedule[i].principal || 0) - (updatedSchedule[i].extra || 0));
-        updatedSchedule[i].balance = runningBalance;
-      }
-
-      await importSchedule(loanId, updatedSchedule, {
-        name: '4 Islas',
+      await updateScheduleRowCascade(cuota.n, {
+        mesLabel: form.mesLabel,
+        date: form.date,
+        principal: Number(form.principal),
+        interest: Number(form.interest),
+        extra: Number(form.extra),
+        maintenance: Number(form.maintenance),
+        expenses: Number(form.expenses),
+        note: form.note,
+        reconciled: Boolean(form.reconciled),
       });
 
       onClose();
@@ -187,6 +176,53 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
               className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-sm text-slate-900 dark:text-zinc-100 outline-none focus:border-emerald-500"
             />
           </div>
+
+          {/* Indicador de Tasa Teórica vs Tasa Real */}
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700 grid grid-cols-3 gap-3 text-center">
+            <div>
+              <p className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-400">Tasa Teórica</p>
+              <p className="text-sm font-bold font-mono text-slate-700 dark:text-zinc-300 mt-0.5">
+                {theorRate.toFixed(2)}%
+              </p>
+              <span className="text-[10px] text-slate-400">Contractual</span>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-400">Tasa Real Mes</p>
+              <p className={`text-sm font-bold font-mono mt-0.5 ${
+                calculatedRealRate <= theorRate ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+              }`}>
+                {calculatedRealRate.toFixed(2)}%
+              </p>
+              <span className="text-[10px] text-slate-400">Anualizada</span>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase text-slate-500 dark:text-zinc-400">Diferencial</p>
+              <p className={`text-sm font-bold font-mono mt-0.5 ${
+                rateDiff <= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+              }`}>
+                {rateDiff > 0 ? `+${rateDiff.toFixed(2)}%` : `${rateDiff.toFixed(2)}%`}
+              </p>
+              <span className="text-[10px] text-slate-400">{rateDiff <= 0 ? 'Favorable' : 'Mayor tasa'}</span>
+            </div>
+          </div>
+
+          {/* Checkbox Conciliado con Estado de Cuenta */}
+          <label className="flex items-center gap-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.reconciled}
+              onChange={(e) => handleChange('reconciled', e.target.checked)}
+              className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 border-emerald-400"
+            />
+            <div className="flex-1">
+              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-300 block">
+                Conciliada con Estado de Cuenta Bancario
+              </span>
+              <span className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 block">
+                Se destacará en negrita en el calendario de amortización (como en tu Excel)
+              </span>
+            </div>
+          </label>
 
           {/* Live Calculated Balance Summary */}
           <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 flex items-center justify-between">

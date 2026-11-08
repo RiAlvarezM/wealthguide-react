@@ -181,6 +181,110 @@ export function AmortizacionProvider({ children }) {
     );
   }, [importSchedule]);
 
+  // ── Actualización de cuota con recálculo en cascada ───────────────────────
+  const updateScheduleRowCascade = useCallback(async (n, updates) => {
+    if (!schedule || schedule.length === 0) return { success: false, error: 'No hay cuotas cargadas' };
+
+    const targetLoanId = currentLoanId;
+    const scheduleRef = collection(db, 'loanDetails', targetLoanId, 'schedule');
+
+    const index = schedule.findIndex((r) => r.n === n);
+    if (index === -1) return { success: false, error: `Cuota #${n} no encontrada` };
+
+    const initialAmount = loanMetadata?.originalAmount || 108000;
+    const prevBalance = index === 0 ? initialAmount : (schedule[index - 1].balance ?? initialAmount);
+
+    // Clonar schedule
+    const newSchedule = schedule.map((row) => ({ ...row }));
+
+    // Actualizar fila objetivo
+    const target = { ...newSchedule[index], ...updates };
+    const principal = Number(target.principal ?? newSchedule[index].principal ?? 0);
+    const extra = Number(target.extra ?? newSchedule[index].extra ?? 0);
+    const interest = Number(target.interest ?? newSchedule[index].interest ?? 0);
+    const maintenance = Number(target.maintenance ?? newSchedule[index].maintenance ?? 0);
+    const expenses = Number(target.expenses ?? newSchedule[index].expenses ?? 0);
+
+    const calculatedTotal = Number((principal + interest + maintenance + expenses).toFixed(2));
+    const calculatedBalance = Math.max(0, Number((prevBalance - principal - extra).toFixed(2)));
+
+    target.principal = principal;
+    target.extra = extra;
+    target.interest = interest;
+    target.maintenance = maintenance;
+    target.expenses = expenses;
+    target.total = calculatedTotal;
+    target.balance = calculatedBalance;
+
+    newSchedule[index] = target;
+
+    // Recalcular saldos en cascada hacia adelante
+    let runningBalance = calculatedBalance;
+    for (let i = index + 1; i < newSchedule.length; i++) {
+      const p = Number(newSchedule[i].principal || 0);
+      const e = Number(newSchedule[i].extra || 0);
+      runningBalance = Math.max(0, Number((runningBalance - p - e).toFixed(2)));
+      newSchedule[i].balance = runningBalance;
+    }
+
+    // Actualizar estado local de inmediato
+    setSchedule(newSchedule);
+
+    // Persistir en Firestore en un batch las filas cambiadas
+    try {
+      const changedRows = newSchedule.slice(index);
+      const batch = writeBatch(db);
+
+      for (const rec of changedRows) {
+        const docRef = doc(scheduleRef, String(rec.n));
+        batch.set(docRef, rec, { merge: true });
+      }
+
+      // Actualizar metadatos
+      const metaDocRef = doc(db, 'loanDetails', targetLoanId);
+      batch.set(
+        metaDocRef,
+        {
+          latestBalance: newSchedule[newSchedule.length - 1]?.balance || 0,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      await batch.commit();
+      return { success: true, updatedCount: changedRows.length };
+    } catch (err) {
+      console.error('Error persistiendo recálculo en cascada:', err);
+      return { success: false, error: err.message };
+    }
+  }, [schedule, currentLoanId, loanMetadata]);
+
+  // ── Marcar cuotas conciliadas hasta la cuota N ───────────────────────────
+  const markReconciledUntil = useCallback(async (cutoffN) => {
+    if (!schedule || schedule.length === 0) return;
+
+    const newSchedule = schedule.map((row) => ({
+      ...row,
+      reconciled: row.n <= cutoffN,
+    }));
+
+    setSchedule(newSchedule);
+
+    try {
+      const batch = writeBatch(db);
+      const scheduleRef = collection(db, 'loanDetails', currentLoanId, 'schedule');
+      for (const rec of newSchedule) {
+        const docRef = doc(scheduleRef, String(rec.n));
+        batch.set(docRef, { reconciled: rec.reconciled }, { merge: true });
+      }
+      const metaDocRef = doc(db, 'loanDetails', currentLoanId);
+      batch.set(metaDocRef, { reconciledCutoffN: cutoffN, updatedAt: serverTimestamp() }, { merge: true });
+      await batch.commit();
+    } catch (err) {
+      console.error('Error guardando límite de conciliación:', err);
+    }
+  }, [schedule, currentLoanId]);
+
   // ── CRUD de pagos extra ───────────────────────────────────────────────────
   const addExtraPayment = useCallback(async ({ date, amount, note }) => {
     const extraRef = collection(db, 'loanDetails', currentLoanId, 'extraPayments');
@@ -220,6 +324,8 @@ export function AmortizacionProvider({ children }) {
         loadSchedule,
         importSchedule,
         syncDefaultSchedule,
+        updateScheduleRowCascade,
+        markReconciledUntil,
         addExtraPayment,
         updateExtraPayment,
         deleteExtraPayment,
