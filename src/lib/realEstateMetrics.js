@@ -36,11 +36,11 @@ export const PROPERTY_CONFIG = {
   'park-avenue': {
     id: 'park-avenue',
     name: 'Park Avenue',
-    fullName: 'PH Park Avenue - Residencia',
-    type: 'residence',
-    typeLabel: 'Residencia Familiar',
-    typeIcon: 'home',
-    typeBadgeColor: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200/50',
+    fullName: 'PH Park Avenue - Apto. Alquilado',
+    type: 'investment',
+    typeLabel: 'Inversión / Renta',
+    typeIcon: 'real_estate_agent',
+    typeBadgeColor: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200/50',
     loanAccountName: 'Park Avenue',
     defaultAppraisalValue: 224900,
     appraisalDate: '2018-12-01',
@@ -50,7 +50,7 @@ export const PROPERTY_CONFIG = {
       maintenance: ['mantenimiento - park ave'],
       other: ['park ave varios', 'seguro - park ave']
     },
-    targetRent: 0,
+    targetRent: 1150,
   }
 };
 
