@@ -5,6 +5,7 @@ import { useWorkspace, WORKSPACE_MODES } from '../../context/WorkspaceContext';
 
 const DIARIO_NAV_ITEMS = [
   { to: '/presupuesto', icon: 'home', label: 'Dashboard Home' },
+  { to: '/compromisos', icon: 'calendar_month', label: 'Compromisos & Radar' },
   { to: '/gastos', icon: 'shopping_bag', label: 'Gastos por Categoría' },
   { to: '/ingresos', icon: 'payments', label: 'Ingresos por Fuente' },
   { to: '/presupuesto-detalle', icon: 'track_changes', label: 'Presupuesto vs Real' },

@@ -315,27 +315,27 @@ export default function HomeBudgetDashboard() {
           </div>
         </div>
 
-        {/* 2. FACTURAS / GASTOS FIJOS (BILLS) */}
+        {/* 2. FACTURAS / GASTOS FIJOS (BILLS & CALENDARIO) */}
         <div
-          onClick={() => navigate('/gastos')}
+          onClick={() => navigate('/compromisos')}
           className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:border-amber-400/60 dark:hover:border-amber-500/40 rounded-2xl p-4 shadow-xs transition-all cursor-pointer group active:scale-[0.98]"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-              <span className="material-symbols-outlined text-lg">receipt_long</span>
+              <span className="material-symbols-outlined text-lg">calendar_month</span>
             </div>
             <span className="material-symbols-outlined text-slate-400 group-hover:translate-x-1 group-hover:text-amber-500 transition-all text-base">
               chevron_right
             </span>
           </div>
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Facturas / Fijos
+            Facturas & Radar
           </div>
           <div className="text-lg sm:text-2xl font-black text-slate-900 dark:text-zinc-100 tracking-tight mt-0.5">
             {formatCurrency(billsTotal)}
           </div>
           <div className="text-[10px] text-slate-400 mt-1">
-            Hipotecas, utilidades y seguros
+            Hipotecas, suscripciones y servicios
           </div>
         </div>
 
