@@ -204,8 +204,10 @@ export function AmortizacionProvider({ children }) {
     const interest = Number(target.interest ?? newSchedule[index].interest ?? 0);
     const maintenance = Number(target.maintenance ?? newSchedule[index].maintenance ?? 0);
     const expenses = Number(target.expenses ?? newSchedule[index].expenses ?? 0);
+    const feci = Number(target.feci ?? newSchedule[index].feci ?? 0);
+    const rent = Number(target.rent ?? newSchedule[index].rent ?? 0);
 
-    const calculatedTotal = Number((principal + interest + maintenance + expenses).toFixed(2));
+    const calculatedTotal = Number((principal + interest + maintenance + expenses + feci).toFixed(2));
     const calculatedBalance = Math.max(0, Number((prevBalance - principal - extra).toFixed(2)));
 
     target.principal = principal;
@@ -213,6 +215,8 @@ export function AmortizacionProvider({ children }) {
     target.interest = interest;
     target.maintenance = maintenance;
     target.expenses = expenses;
+    target.feci = feci;
+    target.rent = rent;
     target.total = calculatedTotal;
     target.balance = calculatedBalance;
 

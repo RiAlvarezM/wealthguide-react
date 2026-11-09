@@ -1,9 +1,12 @@
 // src/components/prestamos/AmortizacionTable.jsx
 //
 // Tabla avanzada del calendario de amortización con capacidad de conciliación mensual:
-//   • Edición directa inline y modal de Capital e Intereses con recálculo en cascada
-//   • Cuotas conciliadas resaltadas en NEGRITA (estilo Excel de conciliación de estados de cuenta)
-//   • Comparativa en cada fila: Tasa Teórica (%) vs Tasa Real Anualizada (%) en base a intereses desembolsados
+//   • Edición directa inline y modal de Capital, Intereses, Mantenimiento, Gastos y Alquiler con recálculo en cascada
+//   • Cuotas conciliadas resaltadas en NEGRITA (estilo Excel de conciliación de estados de cuenta bancarios)
+//   • Flujo de caja del inmueble integrado: Alquiler Cobrado y Flujo Neto mensual de la propiedad
+//   • Desglose completo de desembolsos bancarios: Capital, Interés, Mantenimiento HOA, Gastos/Seguros y FECI
+//   • Control Inteligente de Acumulados Progresivos: Capital Acum., Intereses Acum. y Total Desembolsado
+//   • Comparativa en cada fila: Tasa Teórica (%) vs Tasa Real Anualizada (%) en base a intereses del mes
 //   • Acciones rápidas: "Marcar conciliado hasta este mes", filtros por estado y exportación a CSV
 
 import { useState, useMemo } from 'react';
@@ -55,9 +58,22 @@ export default function AmortizacionTable() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [conciliacionTarget, setConciliacionTarget] = useState(null); // { cuota, prevBalance }
 
+  // Conmutadores inteligentes de columnas
+  const [showDetailColumns, setShowDetailColumns] = useState(true); // Mantenimiento, Gastos, Alquiler y Flujo
+  const [showAccumColumns, setShowAccumColumns] = useState(false); // Capital Acum., Interés Acum., Total Pagado
+
   // Estado para edición inline rápida
   const [editingRowN, setEditingRowN] = useState(null);
-  const [editForm, setEditForm] = useState({ principal: '', interest: '', extra: '', note: '' });
+  const [editForm, setEditForm] = useState({
+    principal: '',
+    interest: '',
+    extra: '',
+    maintenance: '',
+    expenses: '',
+    feci: '',
+    rent: '',
+    note: '',
+  });
   const [isSavingInline, setIsSavingInline] = useState(false);
 
   const today = useMemo(() => new Date(), []);
@@ -79,6 +95,30 @@ export default function AmortizacionTable() {
     const paid = schedule.filter((r) => new Date(r.date) <= today && r.balance > 0);
     return paid[paid.length - 1]?.n ?? schedule[0]?.n;
   }, [schedule, today]);
+
+  // Mapa de acumulados históricos fila por fila (para llevar control inteligente como en Excel)
+  const cumulativeMap = useMemo(() => {
+    if (!schedule || !schedule.length) return {};
+    let cap = 0;
+    let int = 0;
+    let paid = 0;
+    let rentTot = 0;
+    const map = {};
+    for (const r of schedule) {
+      cap += Number(r.principal || 0) + Number(r.extra || 0);
+      int += Number(r.interest || 0);
+      paid += Number(r.total || 0) + Number(r.extra || 0);
+      rentTot += Number(r.rent || 0);
+      map[r.n] = {
+        capitalAccum: cap,
+        interestAccum: int,
+        paidAccum: paid,
+        rentAccum: rentTot,
+        netCashFlowAccum: rentTot - paid,
+      };
+    }
+    return map;
+  }, [schedule]);
 
   // Última cuota conciliada
   const latestReconciled = useMemo(() => {
@@ -110,6 +150,8 @@ export default function AmortizacionTable() {
       rows = rows.filter((r) => !isRowReconciled(r));
     } else if (statusFilter === 'EXTRA') {
       rows = rows.filter((r) => r.extra > 0);
+    } else if (statusFilter === 'RENT_POSITIVE') {
+      rows = rows.filter((r) => (r.rent || 0) > (r.total || 0));
     } else if (statusFilter === 'PAID') {
       rows = rows.filter((r) => new Date(r.date) <= today);
     } else if (statusFilter === 'FUTURE') {
@@ -133,21 +175,29 @@ export default function AmortizacionTable() {
     return rows;
   }, [schedule, search, selectedYear, statusFilter, today]);
 
-  // Totales del resumen
+  // Totales del resumen filtrado
   const summaryTotals = useMemo(() => {
     let principal = 0;
     let extra = 0;
     let interest = 0;
+    let maintenance = 0;
+    let expenses = 0;
     let totalPaid = 0;
+    let rent = 0;
 
     for (const r of filtered) {
-      principal += r.principal || 0;
-      extra += r.extra || 0;
-      interest += r.interest || 0;
-      totalPaid += (r.total || 0) + (r.extra || 0);
+      principal += Number(r.principal || 0);
+      extra += Number(r.extra || 0);
+      interest += Number(r.interest || 0);
+      maintenance += Number(r.maintenance || 0);
+      expenses += Number(r.expenses || 0);
+      totalPaid += Number(r.total || 0) + Number(r.extra || 0);
+      rent += Number(r.rent || 0);
     }
 
-    return { principal, extra, interest, totalPaid };
+    const netCashFlow = rent - totalPaid;
+
+    return { principal, extra, interest, maintenance, expenses, totalPaid, rent, netCashFlow };
   }, [filtered]);
 
   const actualPageSize = pageSize === 'ALL' ? filtered.length || 1 : pageSize;
@@ -172,6 +222,10 @@ export default function AmortizacionTable() {
       principal: row.principal || 0,
       interest: row.interest || 0,
       extra: row.extra || 0,
+      maintenance: row.maintenance || 0,
+      expenses: row.expenses || 0,
+      feci: row.feci || 0,
+      rent: row.rent || 0,
       note: row.note || '',
     });
   }
@@ -187,8 +241,12 @@ export default function AmortizacionTable() {
         principal: Number(editForm.principal),
         interest: Number(editForm.interest),
         extra: Number(editForm.extra),
+        maintenance: Number(editForm.maintenance),
+        expenses: Number(editForm.expenses),
+        feci: Number(editForm.feci),
+        rent: Number(editForm.rent),
         note: editForm.note,
-        reconciled: true, // Al guardar conciliación se marca conciliado
+        reconciled: true,
       });
       setEditingRowN(null);
     } catch (err) {
@@ -222,19 +280,19 @@ export default function AmortizacionTable() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-bold text-slate-900 dark:text-zinc-100">
-                Conciliación Bancaria de Préstamo (4 Islas)
+                Conciliación Bancaria & Flujo de Inmueble (4 Islas)
               </h3>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-xs">
                 Conciliado hasta {latestReconciled?.mesLabel || 'agosto 2026'}
               </span>
             </div>
             <p className="text-xs text-slate-600 dark:text-zinc-400 mt-1">
-              Las filas en <strong className="text-slate-900 dark:text-white font-bold">negrita</strong> corresponden a cuotas verificadas contra tu estado de cuenta. Puedes editar <strong>Capital</strong> e <strong>Interés</strong> directamente en cada cuota para recalcular el saldo en cascada y monitorear la <strong>Tasa Real</strong> vs <strong>Tasa Teórica (3.50%)</strong>.
+              Las cuotas en <strong className="text-slate-900 dark:text-white font-bold">negrita</strong> corresponden a cuotas verificadas contra tu estado de cuenta. Puedes editar <strong>Capital, Interés, Gastos y Alquiler</strong> para recalcular el saldo en cascada y monitorear la <strong>Tasa Real</strong> vs <strong>Tasa Teórica (3.50%)</strong> y el <strong>Flujo Neto</strong> del inmueble.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 self-end md:self-auto shrink-0 bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-emerald-500/20 text-xs">
+        <div className="flex flex-wrap items-center gap-3 self-end md:self-auto shrink-0 bg-white/80 dark:bg-zinc-900/80 p-2.5 rounded-xl border border-emerald-500/20 text-xs">
           <div>
             <span className="text-[10px] uppercase font-semibold text-slate-400 dark:text-zinc-500 block">Saldo Conciliado</span>
             <span className="font-bold font-mono text-emerald-700 dark:text-emerald-400 text-sm tabular-nums">
@@ -248,6 +306,12 @@ export default function AmortizacionTable() {
             </span>
           </div>
           <div className="border-l border-slate-200 dark:border-zinc-800 pl-3">
+            <span className="text-[10px] uppercase font-semibold text-slate-400 dark:text-zinc-500 block">Alquileres Históricos</span>
+            <span className="font-bold font-mono text-teal-700 dark:text-teal-300 text-sm tabular-nums">
+              {fmtCompact.format(cumulativeMap[latestReconciled?.n || 125]?.rentAccum || 68330)}
+            </span>
+          </div>
+          <div className="border-l border-slate-200 dark:border-zinc-800 pl-3">
             <span className="text-[10px] uppercase font-semibold text-slate-400 dark:text-zinc-500 block">Cuotas Verificadas</span>
             <span className="font-bold text-slate-800 dark:text-zinc-200 text-sm tabular-nums">
               {reconciledCount} / {schedule.length}
@@ -256,24 +320,15 @@ export default function AmortizacionTable() {
         </div>
       </div>
 
-      {/* Top summary KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-zinc-800/40 p-4 rounded-2xl border border-slate-200 dark:border-zinc-800">
-        <div>
-          <p className="text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase">Cuotas Mostradas</p>
-          <p className="text-lg font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
-            {filtered.length} <span className="text-xs text-slate-400 font-normal">de {schedule.length}</span>
-          </p>
-        </div>
+      {/* Top summary KPIs con Flujo de Inmueble y Control Inteligente de Acumulados */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 bg-slate-50 dark:bg-zinc-800/40 p-4 rounded-2xl border border-slate-200 dark:border-zinc-800">
         <div>
           <p className="text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase">Capital Amortizado</p>
           <p className="text-lg font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
-            {fmtCompact.format(summaryTotals.principal)}
+            {fmtCompact.format(summaryTotals.principal + summaryTotals.extra)}
           </p>
-        </div>
-        <div>
-          <p className="text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase">Abonos Extraordinarios</p>
-          <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-            {fmtCompact.format(summaryTotals.extra)}
+          <p className="text-[10px] text-slate-400">
+            Abonos extra: {fmtCompact.format(summaryTotals.extra)}
           </p>
         </div>
         <div>
@@ -281,13 +336,45 @@ export default function AmortizacionTable() {
           <p className="text-lg font-bold text-amber-600 dark:text-amber-400 tabular-nums">
             {fmtCompact.format(summaryTotals.interest)}
           </p>
+          <p className="text-[10px] text-slate-400">
+            Mantenimiento: {fmtCompact.format(summaryTotals.maintenance)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase">Total Desembolsado</p>
+          <p className="text-lg font-bold text-slate-900 dark:text-zinc-100 tabular-nums">
+            {fmtCompact.format(summaryTotals.totalPaid)}
+          </p>
+          <p className="text-[10px] text-slate-400">
+            {filtered.length} cuotas mostradas
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase">Alquileres Cobrados</p>
+          <p className="text-lg font-bold text-teal-600 dark:text-teal-400 tabular-nums">
+            {fmtCompact.format(summaryTotals.rent)}
+          </p>
+          <p className="text-[10px] text-teal-600/80 dark:text-teal-400/80">
+            Ingresos brutos por renta
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase">Flujo Neto Inmueble</p>
+          <p className={`text-lg font-bold tabular-nums ${
+            summaryTotals.netCashFlow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+          }`}>
+            {summaryTotals.netCashFlow >= 0 ? `+${fmtCompact.format(summaryTotals.netCashFlow)}` : fmtCompact.format(summaryTotals.netCashFlow)}
+          </p>
+          <p className="text-[10px] text-slate-400">
+            {summaryTotals.netCashFlow >= 0 ? 'Superávit acumulado' : 'Aporte neto habitacional'}
+          </p>
         </div>
       </div>
 
       {/* Filter and Action Bar */}
       <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
         <div className="flex flex-wrap items-center gap-2.5 flex-1">
-          <div className="relative min-w-[200px] flex-1 sm:flex-initial">
+          <div className="relative min-w-[180px] flex-1 sm:flex-initial">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">
               search
             </span>
@@ -330,10 +417,40 @@ export default function AmortizacionTable() {
             <option value="ALL">Todas las cuotas</option>
             <option value="RECONCILED">✓ Solo conciliadas con estado de cuenta ({reconciledCount})</option>
             <option value="PENDING">Solo proyectadas / pendientes</option>
-            <option value="PAID">Solo cuotas pagadas (fecha)</option>
-            <option value="FUTURE">Solo cuotas futuras</option>
+            <option value="RENT_POSITIVE">Solo meses con flujo positivo (Renta {'>'} Cuota)</option>
             <option value="EXTRA">Solo con abono extra</option>
+            <option value="PAID">Solo cuotas pagadas a la fecha</option>
+            <option value="FUTURE">Solo cuotas futuras</option>
           </select>
+
+          {/* Conmutadores de columnas inteligentes */}
+          <button
+            type="button"
+            onClick={() => setShowDetailColumns((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+              showDetailColumns
+                ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-800'
+                : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100'
+            }`}
+            title="Mostrar u ocultar desglose de Alquiler, Flujo Neto, Mantenimiento y Gastos"
+          >
+            <span className="material-symbols-outlined text-[16px]">domain</span>
+            <span>Flujo & Detalle</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowAccumColumns((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+              showAccumColumns
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                : 'bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100'
+            }`}
+            title="Mostrar u ocultar columnas de tracking acumulado progresivo (como en Excel)"
+          >
+            <span className="material-symbols-outlined text-[16px]">trending_up</span>
+            <span>Acumulados</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2 self-end lg:self-auto">
@@ -358,19 +475,47 @@ export default function AmortizacionTable() {
 
       {/* Main Table */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs bg-white dark:bg-zinc-900">
-        <table className="w-full min-w-[1100px] border-collapse">
+        <table className="w-full min-w-[1200px] border-collapse">
           <thead className="bg-slate-50 dark:bg-zinc-800/60 border-b border-slate-200 dark:border-zinc-800">
             <tr>
               <Th>#</Th>
               <Th>Mes / Fecha</Th>
               <Th>Estado</Th>
+              
+              {/* Columnas de Flujo de Inmueble */}
+              {showDetailColumns && (
+                <>
+                  <Th className="text-right text-teal-700 dark:text-teal-300">Alquiler</Th>
+                  <Th className="text-right text-teal-700 dark:text-teal-300">Flujo Neto</Th>
+                </>
+              )}
+
               <Th className="text-right">Cuota Total</Th>
               <Th className="text-right">Capital</Th>
               <Th className="text-right">Abono Extra</Th>
               <Th className="text-right">Interés</Th>
+
+              {/* Columnas de Desglose de Gastos */}
+              {showDetailColumns && (
+                <>
+                  <Th className="text-right">Mantenimiento</Th>
+                  <Th className="text-right">Gastos / Seg.</Th>
+                </>
+              )}
+
               <Th className="text-right">Tasa Teórica</Th>
               <Th className="text-right">Tasa Real</Th>
               <Th className="text-right">Saldo Real</Th>
+
+              {/* Columnas de Acumulados Progresivos Inteligentes */}
+              {showAccumColumns && (
+                <>
+                  <Th className="text-right text-emerald-700 dark:text-emerald-300">Cap. Acum.</Th>
+                  <Th className="text-right text-amber-700 dark:text-amber-300">Int. Acum.</Th>
+                  <Th className="text-right text-slate-700 dark:text-zinc-300">Pagado Acum.</Th>
+                </>
+              )}
+
               <Th className="text-right">Saldo Teórico</Th>
               <Th className="text-right">Ahorro Capital</Th>
               <Th>Nota</Th>
@@ -391,7 +536,11 @@ export default function AmortizacionTable() {
               // Cálculo de tasas
               const theorRate = row.theoreticalRate ?? (row.n <= 21 ? 3.40 : 3.50);
               const realRate = prevBalance > 0 && row.interest > 0 ? (row.interest / prevBalance) * 12 * 100 : 0;
-              const rateDiff = realRate - theorRate;
+
+              // Flujo neto del mes
+              const rent = Number(row.rent || 0);
+              const totalDisbursed = Number(row.total || 0) + Number(row.extra || 0);
+              const netCashFlow = rent - totalDisbursed;
 
               const isEditingThisRow = editingRowN === row.n;
 
@@ -402,6 +551,15 @@ export default function AmortizacionTable() {
               const liveEditRealRate = isEditingThisRow && prevBalance > 0 && Number(editForm.interest || 0) > 0
                 ? (Number(editForm.interest) / prevBalance) * 12 * 100
                 : realRate;
+              const liveEditTotal = isEditingThisRow
+                ? Number((Number(editForm.principal || 0) + Number(editForm.interest || 0) + Number(editForm.maintenance || 0) + Number(editForm.expenses || 0) + Number(editForm.feci || 0)).toFixed(2))
+                : row.total;
+              const liveEditNetCashFlow = isEditingThisRow
+                ? Number(editForm.rent || 0) - liveEditTotal - Number(editForm.extra || 0)
+                : netCashFlow;
+
+              // Acumulados inteligentes calculados
+              const accum = cumulativeMap[row.n] || {};
 
               return (
                 <tr
@@ -445,13 +603,49 @@ export default function AmortizacionTable() {
                     )}
                   </Td>
 
+                  {/* Alquiler Cobrado */}
+                  {showDetailColumns && (
+                    <Td className="text-right tabular-nums font-mono">
+                      {isEditingThisRow ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editForm.rent}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, rent: e.target.value }))}
+                          className="w-20 px-2 py-1 text-right text-xs font-mono font-bold text-teal-700 bg-white dark:bg-zinc-900 border border-teal-500 rounded-lg outline-none"
+                          placeholder="0.00"
+                        />
+                      ) : (
+                        <span className={`font-mono ${reconciled ? 'font-bold' : ''} ${rent > 0 ? 'text-teal-700 dark:text-teal-300' : 'text-slate-300 dark:text-zinc-600'}`}>
+                          {rent > 0 ? fmt.format(rent) : '—'}
+                        </span>
+                      )}
+                    </Td>
+                  )}
+
+                  {/* Flujo Neto Inmueble */}
+                  {showDetailColumns && (
+                    <Td className="text-right tabular-nums font-mono">
+                      <span
+                        className={`font-mono text-xs ${reconciled ? 'font-bold' : 'font-medium'} ${
+                          liveEditNetCashFlow >= 0
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                        title={`Alquiler: ${fmt.format(rent)} - Desembolsos: ${fmt.format(totalDisbursed)}`}
+                      >
+                        {liveEditNetCashFlow >= 0 ? `+${fmt.format(liveEditNetCashFlow)}` : fmt.format(liveEditNetCashFlow)}
+                      </span>
+                    </Td>
+                  )}
+
                   {/* Cuota Total */}
-                  <Td className={`text-right tabular-nums ${reconciled ? 'font-bold text-slate-900 dark:text-zinc-100' : 'text-slate-700 dark:text-zinc-300'}`}>
-                    {fmt.format(row.total || 0)}
+                  <Td className={`text-right tabular-nums font-mono ${reconciled ? 'font-bold text-slate-900 dark:text-zinc-100' : 'text-slate-700 dark:text-zinc-300'}`}>
+                    {fmt.format(liveEditTotal || 0)}
                   </Td>
 
-                  {/* Capital (editable inline o texto resaltado) */}
-                  <Td className="text-right tabular-nums">
+                  {/* Capital */}
+                  <Td className="text-right tabular-nums font-mono">
                     {isEditingThisRow ? (
                       <input
                         type="number"
@@ -470,7 +664,7 @@ export default function AmortizacionTable() {
                   </Td>
 
                   {/* Abono Extra */}
-                  <Td className="text-right tabular-nums">
+                  <Td className="text-right tabular-nums font-mono">
                     {isEditingThisRow ? (
                       <input
                         type="number"
@@ -489,7 +683,7 @@ export default function AmortizacionTable() {
                     )}
                   </Td>
 
-                  {/* Interés (editable inline) */}
+                  {/* Interés */}
                   <Td className="text-right tabular-nums font-mono">
                     {isEditingThisRow ? (
                       <input
@@ -506,6 +700,42 @@ export default function AmortizacionTable() {
                       </span>
                     )}
                   </Td>
+
+                  {/* Mantenimiento */}
+                  {showDetailColumns && (
+                    <Td className="text-right tabular-nums font-mono text-slate-600 dark:text-zinc-400">
+                      {isEditingThisRow ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editForm.maintenance}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, maintenance: e.target.value }))}
+                          className="w-20 px-2 py-1 text-right text-xs font-mono bg-white dark:bg-zinc-900 border border-slate-300 rounded-lg outline-none"
+                          placeholder="0.00"
+                        />
+                      ) : (
+                        fmt.format(row.maintenance || 0)
+                      )}
+                    </Td>
+                  )}
+
+                  {/* Gastos / Seguros */}
+                  {showDetailColumns && (
+                    <Td className="text-right tabular-nums font-mono text-slate-600 dark:text-zinc-400">
+                      {isEditingThisRow ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editForm.expenses}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, expenses: e.target.value }))}
+                          className="w-20 px-2 py-1 text-right text-xs font-mono bg-white dark:bg-zinc-900 border border-slate-300 rounded-lg outline-none"
+                          placeholder="0.00"
+                        />
+                      ) : (
+                        fmt.format(row.expenses || 0)
+                      )}
+                    </Td>
+                  )}
 
                   {/* Tasa Teórica */}
                   <Td className="text-right font-mono text-xs tabular-nums text-slate-500 dark:text-zinc-400">
@@ -542,6 +772,21 @@ export default function AmortizacionTable() {
                       {fmt.format(liveEditBalance)}
                     </span>
                   </Td>
+
+                  {/* Acumulados Progresivos Inteligentes */}
+                  {showAccumColumns && (
+                    <>
+                      <Td className="text-right font-mono tabular-nums text-emerald-700 dark:text-emerald-300 font-medium">
+                        {fmt.format(accum.capitalAccum || 0)}
+                      </Td>
+                      <Td className="text-right font-mono tabular-nums text-amber-700 dark:text-amber-300 font-medium">
+                        {fmt.format(accum.interestAccum || 0)}
+                      </Td>
+                      <Td className="text-right font-mono tabular-nums text-slate-700 dark:text-zinc-300 font-medium">
+                        {fmt.format(accum.paidAccum || 0)}
+                      </Td>
+                    </>
+                  )}
 
                   {/* Saldo Teórico */}
                   <Td className="text-right text-slate-400 dark:text-zinc-500 text-[11px] font-mono tabular-nums">
@@ -583,7 +828,7 @@ export default function AmortizacionTable() {
                           onClick={() => saveInlineEdit(row)}
                           disabled={isSavingInline}
                           title="Guardar y recalcular en cascada"
-                          className="p-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+                          className="p-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors shadow-xs"
                         >
                           <span className="material-symbols-outlined text-[16px]">check</span>
                         </button>
@@ -601,7 +846,7 @@ export default function AmortizacionTable() {
                         <button
                           type="button"
                           onClick={() => startInlineEdit(row)}
-                          title="Edición rápida en fila (Capital, Interés)"
+                          title="Edición rápida en fila (Capital, Interés, Gastos, Alquiler)"
                           className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-zinc-800 transition-colors"
                         >
                           <span className="material-symbols-outlined text-[17px]">edit</span>
@@ -609,7 +854,7 @@ export default function AmortizacionTable() {
                         <button
                           type="button"
                           onClick={() => handleOpenConciliacion(row)}
-                          title="Conciliación detallada (Gastos, Tasas, Saldo)"
+                          title="Conciliación detallada"
                           className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-zinc-800 transition-colors"
                         >
                           <span className="material-symbols-outlined text-[17px]">edit_note</span>

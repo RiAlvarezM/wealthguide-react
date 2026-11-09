@@ -22,6 +22,8 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
     extra: cuota?.extra || 0,
     maintenance: cuota?.maintenance || 0,
     expenses: cuota?.expenses || 0,
+    feci: cuota?.feci || 0,
+    rent: cuota?.rent || 0,
     note: cuota?.note || '',
     reconciled: cuota?.reconciled !== undefined ? cuota.reconciled : cuota?.n <= 125,
   }));
@@ -31,8 +33,9 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
   if (!isOpen || !cuota) return null;
 
   // Cálculo en vivo del nuevo balance y cuota total
-  const calculatedTotal = Number(form.principal) + Number(form.interest) + Number(form.maintenance) + Number(form.expenses);
+  const calculatedTotal = Number(form.principal) + Number(form.interest) + Number(form.maintenance) + Number(form.expenses) + Number(form.feci);
   const calculatedBalance = Math.max(0, Number((prevBalance - Number(form.principal) - Number(form.extra)).toFixed(2)));
+  const calculatedNetCashFlow = Number(form.rent) - calculatedTotal - Number(form.extra);
 
   // Cálculo en vivo de tasas
   const theorRate = cuota?.theoreticalRate ?? (cuota?.n <= 21 ? 3.40 : 3.50);
@@ -57,6 +60,8 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
         extra: Number(form.extra),
         maintenance: Number(form.maintenance),
         expenses: Number(form.expenses),
+        feci: Number(form.feci),
+        rent: Number(form.rent),
         note: form.note,
         reconciled: Boolean(form.reconciled),
       });
@@ -149,7 +154,7 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
 
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400 block mb-1">
-                Mantenimiento / Otros
+                Mantenimiento / HOA
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">$</span>
@@ -159,6 +164,56 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
                   value={form.maintenance}
                   onChange={(e) => handleChange('maintenance', e.target.value)}
                   className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-sm font-mono text-slate-700 dark:text-zinc-300 outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400 block mb-1">
+                Gastos / Seguros
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.expenses}
+                  onChange={(e) => handleChange('expenses', e.target.value)}
+                  className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-sm font-mono text-slate-700 dark:text-zinc-300 outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400 block mb-1">
+                FECI
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.feci}
+                  onChange={(e) => handleChange('feci', e.target.value)}
+                  className="w-full pl-7 pr-3 py-2 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-sm font-mono text-slate-700 dark:text-zinc-300 outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-zinc-400 block mb-1">
+                Alquiler Cobrado
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-emerald-600 font-bold">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={form.rent}
+                  onChange={(e) => handleChange('rent', e.target.value)}
+                  className="w-full pl-7 pr-3 py-2 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-300 dark:border-emerald-800 rounded-xl text-sm font-mono font-bold text-emerald-700 dark:text-emerald-300 outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
@@ -224,19 +279,31 @@ export default function ConciliacionModal({ isOpen, onClose, cuota, prevBalance 
             </div>
           </label>
 
-          {/* Live Calculated Balance Summary */}
-          <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 flex items-center justify-between">
-            <div>
-              <span className="text-xs text-emerald-800 dark:text-emerald-300 font-semibold block">
-                Nuevo Saldo Resultante:
+          {/* Live Calculated Balance and Cash Flow Summary */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700">
+              <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-semibold block uppercase">
+                Flujo Neto Inmueble (Mes)
               </span>
-              <span className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">
-                Total pagado este mes: {fmt.format(calculatedTotal + Number(form.extra))}
+              <p className={`text-base font-bold font-mono mt-0.5 tabular-nums ${
+                calculatedNetCashFlow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+              }`}>
+                {calculatedNetCashFlow >= 0 ? `+${fmt.format(calculatedNetCashFlow)}` : fmt.format(calculatedNetCashFlow)}
+              </p>
+              <span className="text-[10px] text-slate-400 block mt-0.5">
+                Alquiler: {fmt.format(Number(form.rent))} | Salida: {fmt.format(calculatedTotal + Number(form.extra))}
               </span>
             </div>
-            <div className="text-right">
-              <span className="text-lg font-bold font-mono text-emerald-700 dark:text-emerald-400 tabular-nums">
+
+            <div className="p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40">
+              <span className="text-[11px] text-emerald-800 dark:text-emerald-300 font-semibold block uppercase">
+                Nuevo Saldo Hipoteca
+              </span>
+              <p className="text-base font-bold font-mono text-emerald-700 dark:text-emerald-400 mt-0.5 tabular-nums">
                 {fmt.format(calculatedBalance)}
+              </p>
+              <span className="text-[10px] text-emerald-700/80 dark:text-emerald-400/80 block mt-0.5">
+                Amortiza: {fmt.format(Number(form.principal) + Number(form.extra))}
               </span>
             </div>
           </div>
